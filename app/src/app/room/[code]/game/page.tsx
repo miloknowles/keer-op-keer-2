@@ -1059,12 +1059,6 @@ export default function GamePage() {
               >
                 Skip my turn
               </button>
-              <ScoreDialog
-                open={scoresOpen}
-                onOpenChange={setScoresOpen}
-                players={players}
-                config={boardConfig}
-              />
               <AlertDialog
                 open={skipConfirming}
                 onOpenChange={setSkipConfirming}
@@ -1093,6 +1087,13 @@ export default function GamePage() {
             </div>
           )}
         </aside>
+
+        <ScoreDialog
+          open={scoresOpen}
+          onOpenChange={setScoresOpen}
+          players={players}
+          config={boardConfig}
+        />
 
         <GameOverDialog
           open={gameOverOpen}
