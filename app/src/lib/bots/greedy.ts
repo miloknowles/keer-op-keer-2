@@ -9,6 +9,7 @@ import {
   isColorComplete,
 } from "@/lib/game/sheet";
 import { isColorWildcard, isNumberWildcard } from "@/lib/game/dice";
+import { type CurrentRoundPicks, simulateBombCascade } from "@/lib/game/rules";
 import type { BotContext, BotStrategy } from "./types";
 
 const ROUND_FOR_SPECIAL_ORDERING = 3;
@@ -207,6 +208,34 @@ function findBestBombBlock(
   return bestBlock;
 }
 
+function buildBombChain(
+  config: BoardConfig,
+  playerId: string,
+  crossedCells: string[],
+  mainCells: string[],
+  allPlayers: { id: string; crossed_cells: string[] }[],
+  currentRoundPicks: CurrentRoundPicks,
+): string[][] | null {
+  const bombs: string[][] = [];
+
+  while (true) {
+    const cascade = simulateBombCascade(
+      config,
+      crossedCells,
+      mainCells,
+      playerId,
+      bombs,
+      allPlayers.filter((p) => p.id !== playerId),
+      currentRoundPicks,
+    );
+    if (cascade.owedRows.length === bombs.length) return bombs;
+
+    const block = findBestBombBlock(config, cascade.crossedCells, []);
+    if (!block) return null;
+    bombs.push(block);
+  }
+}
+
 export class GreedyBot implements BotStrategy {
   readonly type = "greedy";
 
@@ -242,21 +271,19 @@ export class GreedyBot implements BotStrategy {
         const score = scoreGroup(config, group, crossed);
         if (score <= bestScore) continue;
 
-        // Check if completing a bomb row — find a bomb block if so
-        const newCrossed = [...crossed, ...group];
-        const bombRowCompleted = config.grid.rows.some(
-          (row) =>
-            !isRowComplete(config, row, crossed) &&
-            isRowComplete(config, row, newCrossed) &&
-            (config.scoring.rowItems as Record<string, string>)[row] === "bomb",
+        const bombs = buildBombChain(
+          config,
+          player.id,
+          crossed,
+          group,
+          ctx.allPlayers,
+          {
+            activePlayerId: ctx.activePlayerId,
+            activePick: ctx.activePick,
+            playerPicks: ctx.playerPicks,
+          },
         );
-
-        let bombCells: string[] | undefined;
-        if (bombRowCompleted) {
-          const block = findBestBombBlock(config, crossed, group);
-          if (!block) continue; // can't place bomb, skip this pick
-          bombCells = block;
-        }
+        if (!bombs) continue;
 
         bestScore = score;
         bestPick = {
@@ -266,7 +293,7 @@ export class GreedyBot implements BotStrategy {
           declared_color: declaredColor,
           declared_number: declaredNumber,
           cells: group,
-          ...(bombCells ? { bomb_cells: bombCells } : {}),
+          ...(bombs.length > 0 ? { bombs } : {}),
         };
       }
     }

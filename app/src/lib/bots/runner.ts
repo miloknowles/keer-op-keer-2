@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { rollDice } from "@/lib/game/dice";
 import { computePickResult } from "@/lib/game/effects";
-import { computeScore } from "@/lib/game/scoring";
+import { buildScoringContext, computeScore } from "@/lib/game/scoring";
 import { validateColorNumberPick, validateSpecialPick } from "@/lib/game/rules";
 import { getBotStrategy } from "./index";
 import type { BoardConfig } from "@/boards/board.types";
@@ -34,6 +34,8 @@ async function runBotPick(
     roll,
     isActivePlayer,
     activePick,
+    activePlayerId,
+    playerPicks,
     round,
     allPlayers,
   });
@@ -253,8 +255,23 @@ export async function handleBotRound(roomId: string, depth = 0): Promise<void> {
         .select("*")
         .eq("room_id", roomId);
       const allFullPlayers = (allFull ?? []) as RoomPlayerRow[];
+      const { data: histories } = await supabase
+        .from("room_history")
+        .select("round_number, active_player_id, active_pick, player_picks")
+        .eq("room_id", roomId)
+        .order("round_number", { ascending: true });
+      const scoringContext = buildScoringContext(
+        config,
+        allFullPlayers,
+        histories ?? [],
+      );
       for (const player of allFullPlayers) {
-        const breakdown = computeScore(config, player, allFullPlayers);
+        const breakdown = computeScore(
+          config,
+          player,
+          allFullPlayers,
+          scoringContext,
+        );
         await supabase
           .from("room_players")
           .update({ score: breakdown.total, score_breakdown: breakdown })

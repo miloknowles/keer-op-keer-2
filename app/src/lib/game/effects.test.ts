@@ -159,12 +159,46 @@ describe("computePickResult — bombs", () => {
       declared_color: "y",
       declared_number: 1,
       cells: ["B-R"],
-      bomb_cells: ["A-R", "B-R", "A-S", "B-S"],
+      bombs: [["A-R", "B-R", "A-S", "B-S"]],
     };
 
     const result = computePickResult(config, makePlayer(), pick, roll, []);
 
     expect(result.crossed_cells).toEqual(["B-R", "A-R", "A-S", "B-S"]);
     expect(result.boxes_unlocked).toBe(2);
+  });
+
+  it("applies multiple bomb blocks in order", () => {
+    const pick: GamePick = {
+      type: "special",
+      cells: ["A-Q", "B-Q", "A-R", "B-R"],
+      bombs: [
+        ["A-S", "B-S", "A-T", "B-T"],
+        ["C-S", "D-S", "C-T", "D-T"],
+      ],
+    };
+
+    const result = computePickResult(
+      config,
+      makePlayer(),
+      pick,
+      { ...roll, special: "bomb" },
+      [],
+    );
+
+    expect(result.crossed_cells).toEqual([
+      "A-Q",
+      "B-Q",
+      "A-R",
+      "B-R",
+      "A-S",
+      "B-S",
+      "A-T",
+      "B-T",
+      "C-S",
+      "D-S",
+      "C-T",
+      "D-T",
+    ]);
   });
 });

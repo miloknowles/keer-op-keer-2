@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { computeScore } from "@/lib/game/scoring";
+import { buildScoringContext, computeScore } from "@/lib/game/scoring";
 import type { RoomPlayerRow } from "@/types/game";
 import type { BoardConfig } from "@/boards/board.types";
 import { handleBotRound } from "@/lib/bots/runner";
@@ -75,8 +75,23 @@ export async function POST(
       .select("*")
       .eq("room_id", room.id);
     const allFullPlayers = (allFull ?? []) as RoomPlayerRow[];
+    const { data: histories } = await supabase
+      .from("room_history")
+      .select("round_number, active_player_id, active_pick, player_picks")
+      .eq("room_id", room.id)
+      .order("round_number", { ascending: true });
+    const scoringContext = buildScoringContext(
+      config,
+      allFullPlayers,
+      histories ?? [],
+    );
     for (const player of allFullPlayers) {
-      const breakdown = computeScore(config, player, allFullPlayers);
+      const breakdown = computeScore(
+        config,
+        player,
+        allFullPlayers,
+        scoringContext,
+      );
       const { error: scoreErr } = await supabase
         .from("room_players")
         .update({ score: breakdown.total, score_breakdown: breakdown })

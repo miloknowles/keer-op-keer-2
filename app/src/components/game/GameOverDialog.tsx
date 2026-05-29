@@ -11,12 +11,14 @@ import type { BoardConfig } from "@/boards/board.types";
 import { COLOR_NAMES } from "@/lib/constants";
 import { computeScore } from "@/lib/game/scoring";
 import type { RoomPlayerRow, ScoreBreakdown, Color } from "@/types/game";
+import type { ScoringContext } from "@/lib/game/scoring";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   players: RoomPlayerRow[];
   config: BoardConfig;
+  scoringContext?: ScoringContext;
 }
 
 const RANK_MEDALS = ["🥇", "🥈", "🥉"];
@@ -31,13 +33,21 @@ function colorTotal(bd: ScoreBreakdown) {
   return Object.values(bd.colors).reduce((a, b) => a + b, 0);
 }
 
-export function GameOverDialog({ open, onOpenChange, players, config }: Props) {
+export function GameOverDialog({
+  open,
+  onOpenChange,
+  players,
+  config,
+  scoringContext,
+}: Props) {
   const scoredPlayers = players.map((player) => {
     const breakdown =
-      player.score_breakdown ?? computeScore(config, player, players);
+      scoringContext
+        ? computeScore(config, player, players, scoringContext)
+        : player.score_breakdown ?? computeScore(config, player, players);
     return {
       ...player,
-      score: player.score ?? breakdown.total,
+      score: scoringContext ? breakdown.total : player.score ?? breakdown.total,
       score_breakdown: breakdown,
     };
   });
@@ -83,6 +93,7 @@ export function GameOverDialog({ open, onOpenChange, players, config }: Props) {
                     <th className="text-right px-3 py-2.5 font-medium">Rows</th>
                     <th className="text-right px-3 py-2.5 font-medium">Colors</th>
                     <th className="text-right px-3 py-2.5 font-medium">Stars</th>
+                    <th className="text-right px-3 py-2.5 font-medium">Wild</th>
                     <th className="text-right px-4 py-2.5 font-medium">Total</th>
                   </tr>
                 </thead>
@@ -111,6 +122,9 @@ export function GameOverDialog({ open, onOpenChange, players, config }: Props) {
                         </td>
                         <td className="px-3 py-3 text-right text-red-500">
                           {bd.stars}
+                        </td>
+                        <td className="px-3 py-3 text-right text-gray-700">
+                          {bd.wildcards}
                         </td>
                         <td className="px-4 py-3 text-right font-bold text-gray-900">
                           {p.score}

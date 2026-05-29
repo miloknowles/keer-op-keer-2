@@ -259,9 +259,9 @@ describe("validateColorNumberPick — basic", () => {
 });
 
 describe("validateColorNumberPick — bomb row", () => {
-  it("requires bomb_cells when completing a bomb row (row Q)", () => {
+  it("requires bombs when completing a bomb row (row Q)", () => {
     // Cross all cells in row Q except the last one, then pick the last cell.
-    // Row Q has a "bomb" rowItem — completing it requires bomb_cells in the pick.
+    // Row Q has a "bomb" rowItem — completing it requires bombs in the pick.
     const rowQCells = config.grid.columns
       .map((col) => `${col}-Q`)
       .filter((key) => key in config.cells);
@@ -288,16 +288,16 @@ describe("validateColorNumberPick — bomb row", () => {
     expect(resultNoBomb.valid).toBe(false);
     expect((resultNoBomb as { valid: false; error: string }).error).toMatch(/bomb/i);
 
-    // With a valid 2×2 bomb_cells (rows R-S are not in crossedExceptLast)
+    // With a valid 2×2 bomb block (rows R-S are not in crossedExceptLast)
     const pickWithBomb: ColorNumberPick = {
       ...pick,
-      bomb_cells: ["A-R", "B-R", "A-S", "B-S"],
+      bombs: [["A-R", "B-R", "A-S", "B-S"]],
     };
     const resultWithBomb = validateColorNumberPick(config, pickWithBomb, roll, player, null, true, 1);
     expect(resultWithBomb.valid).toBe(true);
   });
 
-  it("accepts bomb_cells containing already-crossed cells", () => {
+  it("accepts bomb blocks containing already-crossed cells", () => {
     const rowQCells = config.grid.columns
       .map((col) => `${col}-Q`)
       .filter((key) => key in config.cells);
@@ -317,7 +317,7 @@ describe("validateColorNumberPick — bomb row", () => {
       declared_color: cellColor,
       declared_number: 1,
       cells: [lastCell],
-      bomb_cells: ["A-Q", "B-Q", "A-R", "B-R"],
+      bombs: [["A-Q", "B-Q", "A-R", "B-R"]],
     };
 
     const result = validateColorNumberPick(config, pick, roll, player, null, true, 1);
@@ -325,7 +325,7 @@ describe("validateColorNumberPick — bomb row", () => {
     expect(result.valid).toBe(true);
   });
 
-  it("requires bomb_cells for a same-round second bomb-row completer", () => {
+  it("requires bombs for a same-round second bomb-row completer", () => {
     const rowQCells = config.grid.columns
       .map((col) => `${col}-Q`)
       .filter((key) => key in config.cells);
@@ -339,7 +339,7 @@ describe("validateColorNumberPick — bomb row", () => {
       declared_color: cellColor,
       declared_number: 1,
       cells: [lastCell],
-      bomb_cells: ["A-R", "B-R", "A-S", "B-S"],
+      bombs: [["A-R", "B-R", "A-S", "B-S"]],
     };
     const otherPlayer = makePlayer({ id: "p2", crossed_cells: rowQCells });
     const player = makePlayer({ crossed_cells: crossedExceptLast, wildcards: 6 });
@@ -373,7 +373,7 @@ describe("validateColorNumberPick — bomb row", () => {
 
     const resultWithBomb = validateColorNumberPick(
       config,
-      { ...pick, bomb_cells: ["C-R", "D-R", "C-S", "D-S"] },
+      { ...pick, bombs: [["C-R", "D-R", "C-S", "D-S"]] },
       roll,
       player,
       null,
@@ -385,7 +385,7 @@ describe("validateColorNumberPick — bomb row", () => {
     expect(resultWithBomb.valid).toBe(true);
   });
 
-  it("does not require or allow bomb_cells for a later-round bomb-row completer", () => {
+  it("does not require or allow bombs for a later-round bomb-row completer", () => {
     const rowQCells = config.grid.columns
       .map((col) => `${col}-Q`)
       .filter((key) => key in config.cells);
@@ -422,7 +422,7 @@ describe("validateColorNumberPick — bomb row", () => {
 
     const resultWithBomb = validateColorNumberPick(
       config,
-      { ...pick, bomb_cells: ["A-R", "B-R", "A-S", "B-S"] },
+      { ...pick, bombs: [["A-R", "B-R", "A-S", "B-S"]] },
       roll,
       player,
       null,
@@ -432,6 +432,82 @@ describe("validateColorNumberPick — bomb row", () => {
     );
     expect(resultWithBomb.valid).toBe(false);
     expect((resultWithBomb as { valid: false; error: string }).error).toMatch(/only allowed/i);
+  });
+
+  it("requires a second bomb when the first bomb completes another bomb row", () => {
+    const rowQCells = config.grid.columns
+      .map((col) => `${col}-Q`)
+      .filter((key) => key in config.cells);
+    const rowSCells = config.grid.columns
+      .map((col) => `${col}-S`)
+      .filter((key) => key in config.cells);
+    const lastQCell = rowQCells[rowQCells.length - 1];
+    const cellColor = config.cells[lastQCell].color;
+    const player = makePlayer({
+      crossed_cells: [
+        ...rowQCells.slice(0, -1),
+        ...rowSCells.filter((key) => key !== "A-S" && key !== "B-S"),
+      ],
+      wildcards: 6,
+    });
+    const roll: DiceRoll = {
+      colors: ["✕", "p", "o"],
+      numbers: ["1", "2", "3"],
+      special: "fill",
+    };
+    const pick: ColorNumberPick = {
+      type: "color_number",
+      color_die: 0,
+      number_die: 0,
+      declared_color: cellColor,
+      declared_number: 1,
+      cells: [lastQCell],
+      bombs: [["A-R", "B-R", "A-S", "B-S"]],
+    };
+
+    const missingSecond = validateColorNumberPick(config, pick, roll, player, null, true, 1);
+    expect(missingSecond.valid).toBe(false);
+    expect((missingSecond as { valid: false; error: string }).error).toMatch(/each completed bomb row/i);
+
+    const withSecond = validateColorNumberPick(
+      config,
+      { ...pick, bombs: [...pick.bombs!, ["C-R", "D-R", "C-S", "D-S"]] },
+      roll,
+      player,
+      null,
+      true,
+      1,
+    );
+    expect(withSecond.valid).toBe(true);
+  });
+
+  it("rejects extra bombs after the cascade is resolved", () => {
+    const rowQCells = config.grid.columns
+      .map((col) => `${col}-Q`)
+      .filter((key) => key in config.cells);
+    const lastCell = rowQCells[rowQCells.length - 1];
+    const player = makePlayer({ crossed_cells: rowQCells.slice(0, -1), wildcards: 6 });
+    const roll: DiceRoll = {
+      colors: ["✕", "p", "o"],
+      numbers: ["1", "2", "3"],
+      special: "fill",
+    };
+    const pick: ColorNumberPick = {
+      type: "color_number",
+      color_die: 0,
+      number_die: 0,
+      declared_color: config.cells[lastCell].color,
+      declared_number: 1,
+      cells: [lastCell],
+      bombs: [
+        ["A-R", "B-R", "A-S", "B-S"],
+        ["C-R", "D-R", "C-S", "D-S"],
+      ],
+    };
+
+    const result = validateColorNumberPick(config, pick, roll, player, null, true, 1);
+    expect(result.valid).toBe(false);
+    expect((result as { valid: false; error: string }).error).toMatch(/only allowed/i);
   });
 });
 
@@ -761,6 +837,32 @@ describe("validateSpecialPick — bomb", () => {
     const roll = makeRoll({ special: "bomb" });
     const result = validateSpecialPick(config, pick, roll, player);
     expect(result.valid).toBe(true);
+  });
+
+  it("requires a row-earned follow-up bomb when special bomb completes a bomb row", () => {
+    const rowQCells = config.grid.columns
+      .map((col) => `${col}-Q`)
+      .filter((key) => key in config.cells);
+    const player = makePlayer({
+      crossed_cells: rowQCells.filter((key) => key !== "A-Q" && key !== "B-Q"),
+    });
+    const roll = makeRoll({ special: "bomb" });
+    const pick: SpecialPick = {
+      type: "special",
+      cells: ["A-Q", "B-Q", "A-R", "B-R"],
+    };
+
+    const resultNoFollowUp = validateSpecialPick(config, pick, roll, player);
+    expect(resultNoFollowUp.valid).toBe(false);
+    expect((resultNoFollowUp as { valid: false; error: string }).error).toMatch(/bomb/i);
+
+    const resultWithFollowUp = validateSpecialPick(
+      config,
+      { ...pick, bombs: [["C-R", "D-R", "C-S", "D-S"]] },
+      roll,
+      player,
+    );
+    expect(resultWithFollowUp.valid).toBe(true);
   });
 });
 

@@ -103,13 +103,13 @@ export interface ColorNumberPick {
   declared_color: Color;
   declared_number: number; // 1–5
   cells: string[];
-  bomb_cells?: string[]; // only present if a bomb row was completed this turn
+  bombs?: string[][]; // ordered 2x2 blocks earned from completed bomb rows
 }
 
 export interface SpecialPick {
   type: "special";
   cells: string[];
-  bomb_cells?: string[];
+  bombs?: string[][];
 }
 
 export interface PassPick {
@@ -153,5 +153,6 @@ export interface ScoreBreakdown {
   rows: Record<string, number>;
   colors: Partial<Record<Color, number>>;
   stars: number; // negative; −2 per uncrossed star cell
+  wildcards: number; // +1 per unused wildcard slot at game end
   total: number;
 }

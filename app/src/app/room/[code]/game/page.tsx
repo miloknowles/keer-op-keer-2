@@ -14,7 +14,7 @@ import {
 import { isColorWildcard, isNumberWildcard } from "@/lib/game/dice";
 import {
   getValidCells,
-  wasRowCompletedByOthersBeforeRound,
+  simulateBombCascade,
 } from "@/lib/game/rules";
 import { computeHintText } from "@/lib/game/hint";
 import { COLOR_NAMES, MEDALS, SEAT_TO_COLOR } from "@/lib/constants";
@@ -30,6 +30,8 @@ import { useRoomContext } from "@/lib/context/room";
 import { usePresence } from "@/hooks/use-presence";
 import { useRoomChat } from "@/hooks/use-room-chat";
 import { useGameHistory } from "@/hooks/use-game-history";
+import { useRoomHistory } from "@/hooks/use-room-history";
+import { buildScoringContext } from "@/lib/game/scoring";
 import { DEV_MULTI_SEAT, DEV_ADMIN_BOARD } from "@/lib/devFlags";
 import { toast } from "sonner";
 import {
@@ -78,6 +80,7 @@ export default function GamePage() {
 
   const prevCrossedRef = useRef<Record<string, string[]>>({});
   const currentHistory = useGameHistory(room.id, room.round_number);
+  const histories = useRoomHistory(room.id);
 
   const [viewingId, setViewingId] = useState(me.id);
   const [chatOpen, setChatOpen] = useState(false);
@@ -94,7 +97,8 @@ export default function GamePage() {
   const [skipping, setSkipping] = useState(false);
   const [scoresOpen, setScoresOpen] = useState(false);
   const [gameOverOpen, setGameOverOpen] = useState(room.status === "finished");
-  const [rowBombCells, setRowBombCells] = useState<string[]>([]);
+  const [bombBlocks, setBombBlocks] = useState<string[][]>([]);
+  const [currentBombCells, setCurrentBombCells] = useState<string[]>([]);
 
   const { unreadCount, resetUnreadCount } = useRoomChat(room.id, me.id, chatOpen);
   const { play: playDiceRollSound } = useSound("notification/popup", { volume: 0.6 });
@@ -284,29 +288,14 @@ export default function GamePage() {
     selectedCells,
   ]);
 
-  // True when selectedCells would newly complete a bomb-item row.
-  const willCompleteBombRow = useMemo(() => {
-    if (selectedCells.length === 0) return false;
-    const after = [...(effectiveMe.crossed_cells as string[]), ...selectedCells];
-    return boardConfig.grid.rows.some((row) => {
-      if (isRowComplete(boardConfig, row, effectiveMe.crossed_cells as string[])) return false;
-      if (!isRowComplete(boardConfig, row, after)) return false;
-      if ((boardConfig.scoring.rowItems as Record<string, string>)[row] !== "bomb") {
-        return false;
-      }
-      return !wasRowCompletedByOthersBeforeRound(
-        boardConfig,
-        row,
-        effectiveMe.id,
-        players.filter((p) => p.id !== effectiveMe.id),
-        {
-          activePlayerId: currentHistory?.active_player_id,
-          activePick: currentHistory?.active_pick,
-          playerPicks: currentHistory?.player_picks,
-        },
-      );
-    });
-  }, [selectedCells, effectiveMe, boardConfig, players, currentHistory]);
+  const currentRoundPicks = useMemo(
+    () => ({
+      activePlayerId: currentHistory?.active_player_id,
+      activePick: currentHistory?.active_pick,
+      playerPicks: currentHistory?.player_picks,
+    }),
+    [currentHistory],
+  );
 
   const playerMedals = useMemo<Record<string, string>>(() => {
     if (room.status !== "finished") return {};
@@ -318,8 +307,13 @@ export default function GamePage() {
     return result;
   }, [room.status, players]);
 
-  const scoring = boardConfig.scoring;
   const { grid } = boardConfig;
+  const scoringContext = useMemo(
+    () => buildScoringContext(boardConfig, players, histories),
+    [boardConfig, players, histories],
+  );
+  const scoringContextForDisplay =
+    histories.length > 0 ? scoringContext : undefined;
 
   const myCompletedRows = grid.rows.filter((r) =>
     isRowComplete(boardConfig, r, viewing.crossed_cells),
@@ -327,10 +321,21 @@ export default function GamePage() {
   const myCompletedCols = grid.columns.filter((c) =>
     isColumnComplete(boardConfig, c, viewing.crossed_cells),
   );
+  const firstClaimedCols = scoringContextForDisplay
+    ? myCompletedCols.filter((c) => {
+        const viewerRound =
+          scoringContextForDisplay.playerCompletionRounds[viewing.id]?.columns[
+            c
+          ];
+        const firstRound = scoringContextForDisplay.firstCompletionRounds.columns[c];
+        return viewerRound !== undefined && viewerRound === firstRound;
+      })
+    : myCompletedCols;
   const firstTakenRows = grid.rows.filter((r) =>
     players.some((p) => isRowComplete(boardConfig, r, p.crossed_cells)),
   );
   const firstTakenCols = grid.columns.filter((c) =>
+    scoringContextForDisplay?.firstCompletionRounds.columns[c] !== undefined ||
     players.some((p) => isColumnComplete(boardConfig, c, p.crossed_cells)),
   );
 
@@ -338,15 +343,14 @@ export default function GamePage() {
     if (!isMyBoard) return;
     playCellClickSound();
 
-    // Row-bomb placement mode: main pick is ready and completed a bomb row.
-    // Direct further clicks to selecting the 2×2 bomb cells.
+    // Row-bomb placement mode: direct clicks to the current 2x2 bomb block.
     if (inRowBombMode) {
-      if (rowBombCells.includes(key)) {
-        setRowBombCells((p) => p.filter((k) => k !== key));
+      if (currentBombCells.includes(key)) {
+        setCurrentBombCells((p) => p.filter((k) => k !== key));
         return;
       }
-      if (rowBombCells.length >= 4) return;
-      const newSel = [...rowBombCells, key];
+      if (currentBombCells.length >= 4) return;
+      const newSel = [...currentBombCells, key];
       const idxs = newSel.map((k) => {
         const [col, row] = k.split("-");
         return [
@@ -357,7 +361,24 @@ export default function GamePage() {
       const cSpan = Math.max(...idxs.map(([c]) => c)) - Math.min(...idxs.map(([c]) => c));
       const rSpan = Math.max(...idxs.map(([, r]) => r)) - Math.min(...idxs.map(([, r]) => r));
       if (cSpan > 1 || rSpan > 1) return;
-      setRowBombCells(newSel);
+      if (newSel.length === 4) {
+        const nextBombs = [...bombBlocks, newSel];
+        const cascade = simulateBombCascade(
+          boardConfig,
+          effectiveMe.crossed_cells as string[],
+          selectedCells,
+          effectiveMe.id,
+          nextBombs,
+          players.filter((p) => p.id !== effectiveMe.id),
+          currentRoundPicks,
+        );
+        if (cascade.owedRows.length > nextBombs.length) {
+          setBombBlocks(nextBombs);
+          setCurrentBombCells([]);
+          return;
+        }
+      }
+      setCurrentBombCells(newSel);
       return;
     }
 
@@ -439,7 +460,11 @@ export default function GamePage() {
   function handleColorPick(i: 0 | 1 | 2) {
     setSelectedSpecial(false);
     setSelectedColor((prev) => {
-      if (prev !== i) setSelectedCells([]);
+      if (prev !== i) {
+        setSelectedCells([]);
+        setBombBlocks([]);
+        setCurrentBombCells([]);
+      }
       return prev === i ? undefined : i;
     });
   }
@@ -447,7 +472,11 @@ export default function GamePage() {
   function handleNumberPick(i: 0 | 1 | 2) {
     setSelectedSpecial(false);
     setSelectedNumber((prev) => {
-      if (prev !== i) setSelectedCells([]);
+      if (prev !== i) {
+        setSelectedCells([]);
+        setBombBlocks([]);
+        setCurrentBombCells([]);
+      }
       return prev === i ? undefined : i;
     });
   }
@@ -458,6 +487,8 @@ export default function GamePage() {
         setSelectedColor(undefined);
         setSelectedNumber(undefined);
         setSelectedCells([]);
+        setBombBlocks([]);
+        setCurrentBombCells([]);
       }
       return !prev;
     });
@@ -466,6 +497,11 @@ export default function GamePage() {
   useEffect(() => {
     if (room.status === "finished") setGameOverOpen(true);
   }, [room.status]);
+
+  useEffect(() => {
+    setBombBlocks([]);
+    setCurrentBombCells([]);
+  }, [selectedCells, selectedColor, selectedNumber, selectedSpecial]);
 
   const prevPickCountRef = useRef(0);
   useEffect(() => {
@@ -513,7 +549,8 @@ export default function GamePage() {
     setSelectedNumber(undefined);
     setSelectedCells([]);
     setSelectedSpecial(false);
-    setRowBombCells([]);
+    setBombBlocks([]);
+    setCurrentBombCells([]);
   }
 
   async function handleSkipTurn() {
@@ -573,7 +610,7 @@ export default function GamePage() {
           declared_color: declaredColor,
           declared_number: declaredNumber,
           cells: selectedCells,
-          ...(rowBombCells.length > 0 && { bomb_cells: rowBombCells }),
+          ...(submittedBombs.length > 0 && { bombs: submittedBombs }),
           ...(DEV_MULTI_SEAT && { _dev_player_id: effectiveMe.id }),
         }),
       });
@@ -604,7 +641,7 @@ export default function GamePage() {
         body: JSON.stringify({
           type: "special",
           cells: selectedCells,
-          ...(rowBombCells.length > 0 && { bomb_cells: rowBombCells }),
+          ...(submittedBombs.length > 0 && { bombs: submittedBombs }),
           ...(DEV_MULTI_SEAT && { _dev_player_id: effectiveMe.id }),
         }),
       });
@@ -641,20 +678,64 @@ export default function GamePage() {
     }
   }, [selectedSpecial, dice, selectedCells]);
 
-  // Row bomb placement is required when the main pick is ready and completes a bomb row.
-  const inRowBombMode = (mainPickReady || mainSpecialPickReady) && willCompleteBombRow;
+  const submittedBombs = useMemo(
+    () => [
+      ...bombBlocks,
+      ...(currentBombCells.length > 0 ? [currentBombCells] : []),
+    ],
+    [bombBlocks, currentBombCells],
+  );
 
-  const canConfirm = mainPickReady && (!willCompleteBombRow || rowBombCells.length === 4);
-  const canConfirmSpecial = mainSpecialPickReady && (!willCompleteBombRow || rowBombCells.length === 4);
+  const completedBombs = useMemo(
+    () => submittedBombs.filter((block) => block.length === 4),
+    [submittedBombs],
+  );
+
+  const bombCascade = useMemo(() => {
+    if (!(mainPickReady || mainSpecialPickReady)) {
+      return { crossedCells: effectiveMe.crossed_cells as string[], owedRows: [] };
+    }
+    return simulateBombCascade(
+      boardConfig,
+      effectiveMe.crossed_cells as string[],
+      selectedCells,
+      effectiveMe.id,
+      completedBombs,
+      players.filter((p) => p.id !== effectiveMe.id),
+      currentRoundPicks,
+    );
+  }, [
+    mainPickReady,
+    mainSpecialPickReady,
+    boardConfig,
+    effectiveMe,
+    selectedCells,
+    completedBombs,
+    players,
+    currentRoundPicks,
+  ]);
+
+  const bombsOwed = bombCascade.owedRows.length;
+  const inRowBombMode =
+    (mainPickReady || mainSpecialPickReady) &&
+    (bombsOwed > completedBombs.length || currentBombCells.length > 0);
+
+  const bombChainResolved =
+    bombsOwed === completedBombs.length && currentBombCells.length !== 0
+      ? currentBombCells.length === 4
+      : bombsOwed === completedBombs.length;
+
+  const canConfirm = mainPickReady && bombChainResolved;
+  const canConfirmSpecial = mainSpecialPickReady && bombChainResolved;
 
   // Valid cells for the row-bomb 2×2 placement step — mirrors getValidCells bomb logic.
   const rowBombValidCells = useMemo<Set<string> | undefined>(() => {
     if (!inRowBombMode) return undefined;
-    if (rowBombCells.length === 0) {
+    if (currentBombCells.length === 0) {
       return new Set<string>(Object.keys(boardConfig.cells));
     }
-    if (rowBombCells.length >= 4) return new Set<string>();
-    const selIndices = rowBombCells.map((k) => {
+    if (currentBombCells.length >= 4) return new Set<string>();
+    const selIndices = currentBombCells.map((k) => {
       const [col, row] = k.split("-");
       return [boardConfig.grid.columns.indexOf(col), boardConfig.grid.rows.indexOf(row)] as [number, number];
     });
@@ -676,14 +757,14 @@ export default function GamePage() {
           for (let dr = 0; dr <= 1; dr++) {
             const key = `${boardConfig.grid.columns[ac + dc]}-${boardConfig.grid.rows[ar + dr]}`;
             if (!(key in boardConfig.cells)) continue;
-            if (rowBombCells.includes(key)) continue;
+            if (currentBombCells.includes(key)) continue;
             result.add(key);
           }
         }
       }
     }
     return result;
-  }, [inRowBombMode, rowBombCells, boardConfig]);
+  }, [inRowBombMode, currentBombCells, boardConfig]);
 
   const hintText = useMemo<string | null>(
     () =>
@@ -691,7 +772,8 @@ export default function GamePage() {
         isMyBoard,
         dice,
         inRowBombMode,
-        rowBombCells,
+        currentBombCells,
+        bombNumber: bombBlocks.length + 1,
         selectedSpecial,
         selectedColor,
         selectedNumber,
@@ -702,7 +784,8 @@ export default function GamePage() {
       isMyBoard,
       dice,
       inRowBombMode,
-      rowBombCells,
+      currentBombCells,
+      bombBlocks.length,
       selectedSpecial,
       selectedColor,
       selectedNumber,
@@ -812,11 +895,12 @@ export default function GamePage() {
                 <ScoreSheet
                   config={boardConfig}
                   crossedCells={viewing.crossed_cells}
-                  selectedCells={isMyBoard ? [...selectedCells, ...rowBombCells] : []}
+                  selectedCells={isMyBoard ? [...selectedCells, ...bombBlocks.flat(), ...currentBombCells] : []}
                   onCellClick={isMyBoard ? handleCellClick : undefined}
                   validCells={isMyBoard ? (inRowBombMode ? rowBombValidCells : validCells) : undefined}
                   myCompletedRows={myCompletedRows}
                   myCompletedCols={myCompletedCols}
+                  firstClaimedCols={firstClaimedCols}
                   firstTakenRows={firstTakenRows}
                   firstTakenCols={firstTakenCols}
                   columnHeartBonuses={
@@ -832,24 +916,20 @@ export default function GamePage() {
             </div>
 
             {/* Right column: color bonuses + resource tracks */}
-            <div className="flex flex-col gap-3 shrink-0">
-              <div className="bg-white rounded-xl shadow-sm px-4 py-3">
-                <ColorBonuses
-                  config={boardConfig}
-                  viewingCrossedCells={viewing.crossed_cells}
-                  allPlayersCrossedCells={players.map((p) => p.crossed_cells)}
-                />
-              </div>
-              <div className="bg-white rounded-xl shadow-sm px-4 py-3">
-                <ResourceTracks
-                  hearts={viewing.hearts}
-                  heartSize={scoring.heartTrack.size}
-                  boxesUnlocked={viewing.boxes_unlocked}
-                  boxesSpent={viewing.boxes_spent}
-                  wildcards={viewing.wildcards}
-                  wildcardStart={scoring.wildcardTrack.starting}
-                />
-              </div>
+            <div className="bg-white rounded-xl shadow-sm px-4 py-3 flex flex-col gap-4 shrink-0">
+              <ColorBonuses
+                config={boardConfig}
+                viewingPlayerId={viewing.id}
+                viewingCrossedCells={viewing.crossed_cells}
+                allPlayersCrossedCells={players.map((p) => p.crossed_cells)}
+                scoringContext={scoringContextForDisplay}
+              />
+              <ResourceTracks
+                hearts={viewing.hearts}
+                boxesUnlocked={viewing.boxes_unlocked}
+                boxesSpent={viewing.boxes_spent}
+                wildcards={viewing.wildcards}
+              />
             </div>
           </div>
         </main>
@@ -1104,6 +1184,7 @@ export default function GamePage() {
           onOpenChange={setScoresOpen}
           players={players}
           config={boardConfig}
+          scoringContext={scoringContextForDisplay}
         />
 
         <GameOverDialog
@@ -1111,6 +1192,7 @@ export default function GamePage() {
           onOpenChange={setGameOverOpen}
           players={players}
           config={boardConfig}
+          scoringContext={scoringContextForDisplay}
         />
 
         {/* History column — always mounted to preserve subscription */}

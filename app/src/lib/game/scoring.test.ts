@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { BoardConfig } from "@/boards/board.types";
-import type { RoomPlayerRow } from "../../types/game";
-import { computeScore } from "./scoring";
+import type { GamePick, RoomHistoryRow, RoomPlayerRow } from "../../types/game";
+import { buildScoringContext, computeScore } from "./scoring";
 import { getCellsOfColor } from "./sheet";
 
 import rawBoard from "@/boards/kok2-standard.json";
@@ -35,6 +35,30 @@ function makePlayer(overrides: Partial<RoomPlayerRow> = {}): RoomPlayerRow {
   };
 }
 
+function makeHistory(
+  roundNumber: number,
+  activePlayerId: string,
+  activePick: GamePick | null,
+  playerPicks: Record<string, GamePick> = {},
+): RoomHistoryRow {
+  return {
+    id: `history-${roundNumber}`,
+    room_id: "room1",
+    round_number: roundNumber,
+    active_player_id: activePlayerId,
+    dice_colors: ["g", "p", "o"],
+    dice_numbers: ["1", "2", "3"],
+    dice_special: "fill",
+    active_pick: activePick,
+    player_picks: playerPicks,
+    created_at: new Date().toISOString(),
+  };
+}
+
+function specialPick(cells: string[]): GamePick {
+  return { type: "special", cells };
+}
+
 describe("computeScore — no completions", () => {
   it("has no column/row/color bonuses and applies star penalty", () => {
     const player = makePlayer();
@@ -43,7 +67,8 @@ describe("computeScore — no completions", () => {
     expect(result.rows).toEqual({});
     expect(result.colors).toEqual({});
     expect(result.stars).toBe(-24); // 12 uncrossed stars × -2
-    expect(result.total).toBe(-24);
+    expect(result.wildcards).toBe(6);
+    expect(result.total).toBe(-18);
   });
 });
 
@@ -86,6 +111,57 @@ describe("computeScore — column bonus", () => {
     const score2 = computeScore(config, player2, allPlayers);
     expect(score1.columns["H"]).toBe(2 + 1); // first(2) + hearts(1)
     expect(score2.columns["H"]).toBe(0 + 3); // subsequent(0) + hearts(3)
+  });
+
+  it("awards first column bonus to all same-round completers", () => {
+    const hCells = ["H-P", "H-Q", "H-R", "H-S", "H-T", "H-U", "H-V"];
+    const player1 = makePlayer({
+      id: "p1",
+      crossed_cells: hCells,
+      hearts: 4,
+      column_heart_bonuses: { H: 1 },
+    });
+    const player2 = makePlayer({
+      id: "p2",
+      crossed_cells: hCells,
+      hearts: 4,
+      column_heart_bonuses: { H: 3 },
+    });
+    const allPlayers = [player1, player2];
+    const context = buildScoringContext(config, allPlayers, [
+      makeHistory(0, "p1", specialPick(hCells), {
+        p2: specialPick(hCells),
+      }),
+    ]);
+
+    const score1 = computeScore(config, player1, allPlayers, context);
+    const score2 = computeScore(config, player2, allPlayers, context);
+
+    expect(score1.columns["H"]).toBe(2 + 1);
+    expect(score2.columns["H"]).toBe(2 + 3);
+  });
+
+  it("awards subsequent column bonus to later-round completers", () => {
+    const hCells = ["H-P", "H-Q", "H-R", "H-S", "H-T", "H-U", "H-V"];
+    const player1 = makePlayer({
+      id: "p1",
+      crossed_cells: hCells,
+      column_heart_bonuses: { H: 1 },
+    });
+    const player2 = makePlayer({
+      id: "p2",
+      crossed_cells: hCells,
+      column_heart_bonuses: { H: 3 },
+    });
+    const allPlayers = [player1, player2];
+    const context = buildScoringContext(config, allPlayers, [
+      makeHistory(0, "p1", specialPick(hCells)),
+      makeHistory(1, "p2", specialPick(hCells)),
+    ]);
+
+    const score2 = computeScore(config, player2, allPlayers, context);
+
+    expect(score2.columns["H"]).toBe(0 + 3);
   });
 });
 
@@ -133,6 +209,39 @@ describe("computeScore — color bonus", () => {
     const score2 = computeScore(config, player2, allPlayers);
     expect(score2.colors["g"]).toBe(3); // colorCompletion.subsequent = 3
   });
+
+  it("awards first color bonus to all same-round completers", () => {
+    const greenCells = getCellsOfColor(config, "g");
+    const player1 = makePlayer({ id: "p1", crossed_cells: greenCells });
+    const player2 = makePlayer({ id: "p2", crossed_cells: greenCells });
+    const allPlayers = [player1, player2];
+    const context = buildScoringContext(config, allPlayers, [
+      makeHistory(0, "p1", specialPick(greenCells), {
+        p2: specialPick(greenCells),
+      }),
+    ]);
+
+    const score1 = computeScore(config, player1, allPlayers, context);
+    const score2 = computeScore(config, player2, allPlayers, context);
+
+    expect(score1.colors["g"]).toBe(5);
+    expect(score2.colors["g"]).toBe(5);
+  });
+
+  it("awards subsequent color bonus to later-round completers", () => {
+    const greenCells = getCellsOfColor(config, "g");
+    const player1 = makePlayer({ id: "p1", crossed_cells: greenCells });
+    const player2 = makePlayer({ id: "p2", crossed_cells: greenCells });
+    const allPlayers = [player1, player2];
+    const context = buildScoringContext(config, allPlayers, [
+      makeHistory(0, "p1", specialPick(greenCells)),
+      makeHistory(1, "p2", specialPick(greenCells)),
+    ]);
+
+    const score2 = computeScore(config, player2, allPlayers, context);
+
+    expect(score2.colors["g"]).toBe(3);
+  });
 });
 
 describe("computeScore — star penalty", () => {
@@ -163,6 +272,15 @@ describe("computeScore — star penalty", () => {
   });
 });
 
+describe("computeScore — unused wildcards", () => {
+  it("awards +1 per unused wildcard", () => {
+    const player = makePlayer({ wildcards: 3 });
+    const result = computeScore(config, player, [player]);
+    expect(result.wildcards).toBe(3);
+    expect(result.total).toBe(result.stars + 3);
+  });
+});
+
 describe("computeScore — total", () => {
   it("total is the sum of all components", () => {
     const player = makePlayer();
@@ -174,7 +292,8 @@ describe("computeScore — total", () => {
         (a, b) => a + b,
         0,
       ) +
-      result.stars;
+      result.stars +
+      result.wildcards;
     expect(result.total).toBe(expected);
   });
 });
@@ -227,7 +346,8 @@ describe("computeScore — multiple columns", () => {
           (a, b) => a + b,
           0,
         ) +
-        result.stars,
+        result.stars +
+        result.wildcards,
     );
   });
 
