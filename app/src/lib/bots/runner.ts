@@ -24,6 +24,8 @@ async function runBotPick(
   activePick: GamePick | null,
   allPlayers: RoomPlayerRow[],
   round: number,
+  activePlayerId: string,
+  playerPicks: Record<string, GamePick>,
 ): Promise<void> {
   const strategy = getBotStrategy(botPlayer.bot_type ?? "greedy");
   let pick = strategy.choosePick({
@@ -38,13 +40,33 @@ async function runBotPick(
 
   // Validate non-pass picks; fall back to pass if invalid
   if (pick.type === "color_number") {
-    const result = validateColorNumberPick(config, pick, roll, botPlayer, activePick, isActivePlayer, round);
+    const result = validateColorNumberPick(
+      config,
+      pick,
+      roll,
+      botPlayer,
+      activePick,
+      isActivePlayer,
+      round,
+      allPlayers.filter((p) => p.id !== botPlayer.id),
+      { activePlayerId, activePick, playerPicks },
+    );
     if (!result.valid) {
       console.warn(`[bot] invalid color_number pick for ${botPlayer.id}: ${result.error} — passing`);
       pick = { type: "pass" };
     }
   } else if (pick.type === "special") {
-    const result = validateSpecialPick(config, pick, roll, botPlayer, activePick, isActivePlayer, round);
+    const result = validateSpecialPick(
+      config,
+      pick,
+      roll,
+      botPlayer,
+      activePick,
+      isActivePlayer,
+      round,
+      allPlayers.filter((p) => p.id !== botPlayer.id),
+      { activePlayerId, activePick, playerPicks },
+    );
     if (!result.valid) {
       console.warn(`[bot] invalid special pick for ${botPlayer.id}: ${result.error} — passing`);
       pick = { type: "pass" };
@@ -75,7 +97,14 @@ async function runBotPick(
 
   // Compute and write updated player state
   const otherPlayers = allPlayers.filter((p) => p.id !== botPlayer.id);
-  const result = computePickResult(config, botPlayer, pick, roll, otherPlayers);
+  const result = computePickResult(
+    config,
+    botPlayer,
+    pick,
+    roll,
+    otherPlayers,
+    { activePlayerId, activePick, playerPicks },
+  );
   const { error: playerErr } = await supabase
     .from("room_players")
     .update(result)
@@ -126,7 +155,7 @@ export async function handleBotRound(roomId: string, depth = 0): Promise<void> {
   // Load or create history row for this round
   let { data: history } = await supabase
     .from("room_history")
-    .select("id, dice_colors, dice_numbers, dice_special, active_pick, player_picks")
+    .select("id, active_player_id, dice_colors, dice_numbers, dice_special, active_pick, player_picks")
     .eq("room_id", roomId)
     .eq("round_number", room.round_number)
     .maybeSingle();
@@ -144,7 +173,7 @@ export async function handleBotRound(roomId: string, depth = 0): Promise<void> {
         dice_numbers: dice.numbers,
         dice_special: dice.special,
       })
-      .select("id, dice_colors, dice_numbers, dice_special, active_pick, player_picks")
+      .select("id, active_player_id, dice_colors, dice_numbers, dice_special, active_pick, player_picks")
       .single();
     if (rollErr || !newHistory) {
       console.error("[bot] auto-roll insert failed:", rollErr);
@@ -162,7 +191,8 @@ export async function handleBotRound(roomId: string, depth = 0): Promise<void> {
   };
 
   const activePick = history.active_pick as GamePick | null;
-  const playerPicks = (history.player_picks ?? {}) as Record<string, unknown>;
+  const playerPicks = (history.player_picks ?? {}) as Record<string, GamePick>;
+  const activePlayerId = history.active_player_id as string;
 
   // Pick for the active bot player if they haven't submitted yet
   if (activePlayer.is_bot && activePick === null) {
@@ -171,6 +201,7 @@ export async function handleBotRound(roomId: string, depth = 0): Promise<void> {
       activePlayer, roll,
       true, null,
       allPlayers, room.round_number,
+      activePlayerId, playerPicks,
     );
     // Reload active_pick for non-active bots
     const { data: refreshed } = await supabase
@@ -201,6 +232,7 @@ export async function handleBotRound(roomId: string, depth = 0): Promise<void> {
       bot, roll,
       false, currentActivePick,
       allPlayers, room.round_number,
+      activePlayerId, playerPicks,
     );
   }
 

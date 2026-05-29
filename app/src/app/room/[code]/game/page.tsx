@@ -12,7 +12,10 @@ import {
   getConnectedRegion,
 } from "@/lib/game/sheet";
 import { isColorWildcard, isNumberWildcard } from "@/lib/game/dice";
-import { getValidCells } from "@/lib/game/rules";
+import {
+  getValidCells,
+  wasRowCompletedByOthersBeforeRound,
+} from "@/lib/game/rules";
 import { computeHintText } from "@/lib/game/hint";
 import { COLOR_NAMES, MEDALS, SEAT_TO_COLOR } from "@/lib/constants";
 import { ScoreSheet } from "@/components/game/ScoreSheet";
@@ -288,9 +291,22 @@ export default function GamePage() {
     return boardConfig.grid.rows.some((row) => {
       if (isRowComplete(boardConfig, row, effectiveMe.crossed_cells as string[])) return false;
       if (!isRowComplete(boardConfig, row, after)) return false;
-      return (boardConfig.scoring.rowItems as Record<string, string>)[row] === "bomb";
+      if ((boardConfig.scoring.rowItems as Record<string, string>)[row] !== "bomb") {
+        return false;
+      }
+      return !wasRowCompletedByOthersBeforeRound(
+        boardConfig,
+        row,
+        effectiveMe.id,
+        players.filter((p) => p.id !== effectiveMe.id),
+        {
+          activePlayerId: currentHistory?.active_player_id,
+          activePick: currentHistory?.active_pick,
+          playerPicks: currentHistory?.player_picks,
+        },
+      );
     });
-  }, [selectedCells, effectiveMe.crossed_cells, boardConfig]);
+  }, [selectedCells, effectiveMe, boardConfig, players, currentHistory]);
 
   const playerMedals = useMemo<Record<string, string>>(() => {
     if (room.status !== "finished") return {};

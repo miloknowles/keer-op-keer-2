@@ -5,6 +5,7 @@ import type {
   RoomPlayerRow,
   ColorNumberPick,
   SpecialPick,
+  GamePick,
 } from "../../types/game";
 import {
   validateColorNumberPick,
@@ -293,6 +294,115 @@ describe("validateColorNumberPick — bomb row", () => {
     };
     const resultWithBomb = validateColorNumberPick(config, pickWithBomb, roll, player, null, true, 1);
     expect(resultWithBomb.valid).toBe(true);
+  });
+
+  it("requires bomb_cells for a same-round second bomb-row completer", () => {
+    const rowQCells = config.grid.columns
+      .map((col) => `${col}-Q`)
+      .filter((key) => key in config.cells);
+    const lastCell = rowQCells[rowQCells.length - 1];
+    const crossedExceptLast = rowQCells.slice(0, -1);
+    const cellColor = config.cells[lastCell].color;
+    const otherPick: GamePick = {
+      type: "color_number",
+      color_die: 0,
+      number_die: 0,
+      declared_color: cellColor,
+      declared_number: 1,
+      cells: [lastCell],
+      bomb_cells: ["A-R", "B-R", "A-S", "B-S"],
+    };
+    const otherPlayer = makePlayer({ id: "p2", crossed_cells: rowQCells });
+    const player = makePlayer({ crossed_cells: crossedExceptLast, wildcards: 6 });
+    const roll: DiceRoll = {
+      colors: ["✕", "p", "o"],
+      numbers: ["1", "2", "3"],
+      special: "fill",
+    };
+    const pick: ColorNumberPick = {
+      type: "color_number",
+      color_die: 0,
+      number_die: 0,
+      declared_color: cellColor,
+      declared_number: 1,
+      cells: [lastCell],
+    };
+
+    const resultNoBomb = validateColorNumberPick(
+      config,
+      pick,
+      roll,
+      player,
+      null,
+      true,
+      1,
+      [otherPlayer],
+      { activePlayerId: "p2", activePick: otherPick },
+    );
+    expect(resultNoBomb.valid).toBe(false);
+    expect((resultNoBomb as { valid: false; error: string }).error).toMatch(/bomb/i);
+
+    const resultWithBomb = validateColorNumberPick(
+      config,
+      { ...pick, bomb_cells: ["C-R", "D-R", "C-S", "D-S"] },
+      roll,
+      player,
+      null,
+      true,
+      1,
+      [otherPlayer],
+      { activePlayerId: "p2", activePick: otherPick },
+    );
+    expect(resultWithBomb.valid).toBe(true);
+  });
+
+  it("does not require or allow bomb_cells for a later-round bomb-row completer", () => {
+    const rowQCells = config.grid.columns
+      .map((col) => `${col}-Q`)
+      .filter((key) => key in config.cells);
+    const lastCell = rowQCells[rowQCells.length - 1];
+    const crossedExceptLast = rowQCells.slice(0, -1);
+    const cellColor = config.cells[lastCell].color;
+    const otherPlayer = makePlayer({ id: "p2", crossed_cells: rowQCells });
+    const player = makePlayer({ crossed_cells: crossedExceptLast, wildcards: 6 });
+    const roll: DiceRoll = {
+      colors: ["✕", "p", "o"],
+      numbers: ["1", "2", "3"],
+      special: "fill",
+    };
+    const pick: ColorNumberPick = {
+      type: "color_number",
+      color_die: 0,
+      number_die: 0,
+      declared_color: cellColor,
+      declared_number: 1,
+      cells: [lastCell],
+    };
+
+    const resultNoBomb = validateColorNumberPick(
+      config,
+      pick,
+      roll,
+      player,
+      null,
+      true,
+      1,
+      [otherPlayer],
+    );
+    expect(resultNoBomb.valid).toBe(true);
+
+    const resultWithBomb = validateColorNumberPick(
+      config,
+      { ...pick, bomb_cells: ["A-R", "B-R", "A-S", "B-S"] },
+      roll,
+      player,
+      null,
+      true,
+      1,
+      [otherPlayer],
+    );
+    expect(resultWithBomb.valid).toBe(false);
+    expect((resultWithBomb as { valid: false; error: string }).error).toMatch(/only allowed/i);
   });
 });
 
@@ -687,4 +797,3 @@ describe("validateSpecialPick — two_stars", () => {
     expect(result.valid).toBe(false);
   });
 });
-

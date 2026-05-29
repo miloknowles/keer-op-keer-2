@@ -12,7 +12,7 @@ const config = rawBoard as unknown as BoardConfig;
 // Column A bonus: first=5, subsequent=3
 // colorCompletion: first=5, subsequent=3
 // starPenalty: -2 per uncrossed star (12 total)
-// rowBonuses: all rows = 5 pts to first completer
+// rowBonuses: all rows = 5 pts to every completer
 
 function makePlayer(overrides: Partial<RoomPlayerRow> = {}): RoomPlayerRow {
   return {

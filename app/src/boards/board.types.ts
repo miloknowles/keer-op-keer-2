@@ -5,7 +5,7 @@ export type Color = "p" | "o" | "y" | "g" | "b";
 // "box"   — when crossed off, grants the player 1 box on their box track.
 export type CellSpecial = "star" | "box";
 
-// Item awarded to the first player to complete a row.
+// Item awarded to players who complete a row in the first round it is completed.
 // "bomb"  — must be played immediately on the same turn; cross off any 2×2 block anywhere.
 // "heart" — advances the player's heart track by 1.
 // "box"   — grants the player 1 box on their box track.
@@ -35,11 +35,11 @@ export interface BoardConfig {
     // their current heart count on top of the printed value.
     columnBonuses: Record<string, { first: number; subsequent: number }>;
 
-    // Points awarded to the first player to complete a row (cross off all cells).
+    // Points awarded to every player who completes a row (cross off all cells).
     // Subsequent completers earn no points and no item.
     rowBonuses: Record<string, number>;
 
-    // Item given to the first player to complete a row. Omit if the row has no item.
+    // Item given to first-round row completers. Omit if the row has no item.
     rowItems: Partial<Record<string, RowItem>>;
 
     // Bonus for crossing off every cell of a single color.
