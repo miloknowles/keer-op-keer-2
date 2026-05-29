@@ -135,7 +135,8 @@ export function ScoreSheet({
                     className={cn(
                       "w-10 h-10 shrink-0 rounded relative flex items-center justify-center transition-all",
                       COLOR_BG[color],
-                      isStartCol && "shadow-[inset_0_0_0_2px_rgba(0,0,0,0.22)]",
+                      isStartCol &&
+                        "z-10 shadow-[inset_0_0_0_2px_rgba(17,24,39,0.45),0_0_0_1px_rgba(255,255,255,0.85),0_1px_4px_rgba(17,24,39,0.16)]",
                       isCrossed && "brightness-90",
                       isSelected && "ring-2 ring-inset ring-black/70",
                       onCellClick && !isCrossed && !isInvalid && "hover:brightness-110 cursor-pointer",
@@ -150,7 +151,7 @@ export function ScoreSheet({
                       <span className="text-lg leading-none">📦</span>
                     )}
                     {isCrossed && (
-                      <span className="text-white font-black text-base leading-none pointer-events-none">
+                      <span className="text-gray-950/80 font-black text-base leading-none pointer-events-none">
                         ✕
                       </span>
                     )}

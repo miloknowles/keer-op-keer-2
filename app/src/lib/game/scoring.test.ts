@@ -56,6 +56,18 @@ describe("computeScore — column bonus", () => {
     expect(result.columns["H"]).toBe(4);
   });
 
+  it("uses the heart count recorded when the column was completed", () => {
+    const hCells = ["H-P", "H-Q", "H-R", "H-S", "H-T", "H-U", "H-V"];
+    const player = makePlayer({
+      crossed_cells: hCells,
+      hearts: 5,
+      column_heart_bonuses: { H: 2 },
+    });
+    const result = computeScore(config, player, [player]);
+    // Column H first = 2, + 2 recorded hearts = 4
+    expect(result.columns["H"]).toBe(4);
+  });
+
   it("awards subsequent column bonus to second completer", () => {
     const hCells = ["H-P", "H-Q", "H-R", "H-S", "H-T", "H-U", "H-V"];
     // Player 1 completed H first (their crossed_cells has H-P at index 0)
@@ -217,5 +229,19 @@ describe("computeScore — multiple columns", () => {
         ) +
         result.stars,
     );
+  });
+
+  it("uses each column's own recorded heart count", () => {
+    const hCells = ["H-P", "H-Q", "H-R", "H-S", "H-T", "H-U", "H-V"];
+    const aCells = ["A-P", "A-Q", "A-R", "A-S", "A-T", "A-U", "A-V"];
+    const player = makePlayer({
+      crossed_cells: [...hCells, ...aCells],
+      hearts: 5,
+      column_heart_bonuses: { H: 1, A: 4 },
+    });
+    const result = computeScore(config, player, [player]);
+
+    expect(result.columns["H"]).toBe(2 + 1);
+    expect(result.columns["A"]).toBe(5 + 4);
   });
 });
