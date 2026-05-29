@@ -7,7 +7,7 @@ import {
   validateSpecialPick,
 } from "@/lib/game/rules";
 import { computePickResult } from "@/lib/game/effects";
-import { computeScore } from "@/lib/game/scoring";
+import { buildScoringContext, computeScore } from "@/lib/game/scoring";
 import type {
   GamePick,
   DiceRoll,
@@ -239,13 +239,28 @@ export async function POST(
 
   if (advanceResult === "game_ends") {
     // ── 15. Compute and persist final scores (room already marked finished) ─
+    const { data: histories } = await supabase
+      .from("room_history")
+      .select("round_number, active_player_id, active_pick, player_picks")
+      .eq("room_id", room.id)
+      .order("round_number", { ascending: true });
     const { data: allFull } = await supabase
       .from("room_players")
       .select("*")
       .eq("room_id", room.id);
     const allFullPlayers = (allFull ?? []) as RoomPlayerRow[];
+    const scoringContext = buildScoringContext(
+      config,
+      allFullPlayers,
+      histories ?? [],
+    );
     for (const player of allFullPlayers) {
-      const breakdown = computeScore(config, player, allFullPlayers);
+      const breakdown = computeScore(
+        config,
+        player,
+        allFullPlayers,
+        scoringContext,
+      );
       const { error: scoreErr } = await supabase
         .from("room_players")
         .update({ score: breakdown.total, score_breakdown: breakdown })

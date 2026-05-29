@@ -30,6 +30,8 @@ import { useRoomContext } from "@/lib/context/room";
 import { usePresence } from "@/hooks/use-presence";
 import { useRoomChat } from "@/hooks/use-room-chat";
 import { useGameHistory } from "@/hooks/use-game-history";
+import { useRoomHistory } from "@/hooks/use-room-history";
+import { buildScoringContext } from "@/lib/game/scoring";
 import { DEV_MULTI_SEAT, DEV_ADMIN_BOARD } from "@/lib/devFlags";
 import { toast } from "sonner";
 import {
@@ -78,6 +80,7 @@ export default function GamePage() {
 
   const prevCrossedRef = useRef<Record<string, string[]>>({});
   const currentHistory = useGameHistory(room.id, room.round_number);
+  const histories = useRoomHistory(room.id);
 
   const [viewingId, setViewingId] = useState(me.id);
   const [chatOpen, setChatOpen] = useState(false);
@@ -320,6 +323,12 @@ export default function GamePage() {
 
   const scoring = boardConfig.scoring;
   const { grid } = boardConfig;
+  const scoringContext = useMemo(
+    () => buildScoringContext(boardConfig, players, histories),
+    [boardConfig, players, histories],
+  );
+  const scoringContextForDisplay =
+    histories.length > 0 ? scoringContext : undefined;
 
   const myCompletedRows = grid.rows.filter((r) =>
     isRowComplete(boardConfig, r, viewing.crossed_cells),
@@ -327,10 +336,21 @@ export default function GamePage() {
   const myCompletedCols = grid.columns.filter((c) =>
     isColumnComplete(boardConfig, c, viewing.crossed_cells),
   );
+  const firstClaimedCols = scoringContextForDisplay
+    ? myCompletedCols.filter((c) => {
+        const viewerRound =
+          scoringContextForDisplay.playerCompletionRounds[viewing.id]?.columns[
+            c
+          ];
+        const firstRound = scoringContextForDisplay.firstCompletionRounds.columns[c];
+        return viewerRound !== undefined && viewerRound === firstRound;
+      })
+    : myCompletedCols;
   const firstTakenRows = grid.rows.filter((r) =>
     players.some((p) => isRowComplete(boardConfig, r, p.crossed_cells)),
   );
   const firstTakenCols = grid.columns.filter((c) =>
+    scoringContextForDisplay?.firstCompletionRounds.columns[c] !== undefined ||
     players.some((p) => isColumnComplete(boardConfig, c, p.crossed_cells)),
   );
 
@@ -817,6 +837,7 @@ export default function GamePage() {
                   validCells={isMyBoard ? (inRowBombMode ? rowBombValidCells : validCells) : undefined}
                   myCompletedRows={myCompletedRows}
                   myCompletedCols={myCompletedCols}
+                  firstClaimedCols={firstClaimedCols}
                   firstTakenRows={firstTakenRows}
                   firstTakenCols={firstTakenCols}
                   columnHeartBonuses={
@@ -832,24 +853,22 @@ export default function GamePage() {
             </div>
 
             {/* Right column: color bonuses + resource tracks */}
-            <div className="flex flex-col gap-3 shrink-0">
-              <div className="bg-white rounded-xl shadow-sm px-4 py-3">
-                <ColorBonuses
-                  config={boardConfig}
-                  viewingCrossedCells={viewing.crossed_cells}
-                  allPlayersCrossedCells={players.map((p) => p.crossed_cells)}
-                />
-              </div>
-              <div className="bg-white rounded-xl shadow-sm px-4 py-3">
-                <ResourceTracks
-                  hearts={viewing.hearts}
-                  heartSize={scoring.heartTrack.size}
-                  boxesUnlocked={viewing.boxes_unlocked}
-                  boxesSpent={viewing.boxes_spent}
-                  wildcards={viewing.wildcards}
-                  wildcardStart={scoring.wildcardTrack.starting}
-                />
-              </div>
+            <div className="bg-white rounded-xl shadow-sm px-4 py-3 flex flex-col gap-4 shrink-0">
+              <ColorBonuses
+                config={boardConfig}
+                viewingPlayerId={viewing.id}
+                viewingCrossedCells={viewing.crossed_cells}
+                allPlayersCrossedCells={players.map((p) => p.crossed_cells)}
+                scoringContext={scoringContextForDisplay}
+              />
+              <ResourceTracks
+                hearts={viewing.hearts}
+                heartSize={scoring.heartTrack.size}
+                boxesUnlocked={viewing.boxes_unlocked}
+                boxesSpent={viewing.boxes_spent}
+                wildcards={viewing.wildcards}
+                wildcardStart={scoring.wildcardTrack.starting}
+              />
             </div>
           </div>
         </main>
@@ -1104,6 +1123,7 @@ export default function GamePage() {
           onOpenChange={setScoresOpen}
           players={players}
           config={boardConfig}
+          scoringContext={scoringContextForDisplay}
         />
 
         <GameOverDialog
@@ -1111,6 +1131,7 @@ export default function GamePage() {
           onOpenChange={setGameOverOpen}
           players={players}
           config={boardConfig}
+          scoringContext={scoringContextForDisplay}
         />
 
         {/* History column — always mounted to preserve subscription */}

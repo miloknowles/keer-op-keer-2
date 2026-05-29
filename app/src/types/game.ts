@@ -153,5 +153,6 @@ export interface ScoreBreakdown {
   rows: Record<string, number>;
   colors: Partial<Record<Color, number>>;
   stars: number; // negative; −2 per uncrossed star cell
+  wildcards: number; // +1 per unused wildcard slot at game end
   total: number;
 }

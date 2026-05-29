@@ -2,11 +2,14 @@ import { getBoardColors, isColorComplete, getCellsOfColor } from "@/lib/game/she
 import { COLOR_BG } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import type { BoardConfig } from "@/boards/board.types";
+import type { ScoringContext } from "@/lib/game/scoring";
 
 interface ColorBonusesProps {
   config: BoardConfig;
+  viewingPlayerId: string;
   viewingCrossedCells: string[];
   allPlayersCrossedCells: string[][];
+  scoringContext?: ScoringContext;
 }
 
 function completionIndex(crossed: string[], targets: Set<string>): number {
@@ -19,8 +22,10 @@ function completionIndex(crossed: string[], targets: Set<string>): number {
 
 export function ColorBonuses({
   config,
+  viewingPlayerId,
   viewingCrossedCells,
   allPlayersCrossedCells,
+  scoringContext,
 }: ColorBonusesProps) {
   const colors = getBoardColors(config);
   const { first: firstPts, subsequent: subPts } = config.scoring.colorCompletion;
@@ -41,18 +46,34 @@ export function ColorBonuses({
           const targets = new Set(cellKeys);
 
           const viewerCompleted = isColorComplete(config, color, viewingCrossedCells);
-          const viewerIdx = viewerCompleted
+          const viewerRound =
+            scoringContext?.playerCompletionRounds[viewingPlayerId]?.colors[
+              color
+            ];
+          const firstRound = scoringContext?.firstCompletionRounds.colors[color];
+          const fallbackViewerIdx = viewerCompleted
             ? completionIndex(viewingCrossedCells, targets)
             : Infinity;
-
-          const firstTakenByOther = allPlayersCrossedCells.some(
+          const fallbackFirstTakenByOther = allPlayersCrossedCells.some(
             (crossed) =>
               crossed !== viewingCrossedCells &&
               isColorComplete(config, color, crossed) &&
-              completionIndex(crossed, targets) < viewerIdx,
+              completionIndex(crossed, targets) < fallbackViewerIdx,
           );
-
-          const viewerIsFirst = viewerCompleted && !firstTakenByOther;
+          const firstTaken =
+            firstRound !== undefined ||
+            fallbackFirstTakenByOther ||
+            viewerCompleted;
+          const contextViewerIsFirst =
+            viewerCompleted &&
+            viewerRound !== undefined &&
+            firstRound !== undefined &&
+            viewerRound === firstRound;
+          const viewerIsFirst =
+            firstRound !== undefined
+              ? contextViewerIsFirst
+              : viewerCompleted && !fallbackFirstTakenByOther;
+          const firstTakenByOther = firstTaken && !viewerIsFirst;
 
           return (
             <div key={color} className="flex items-center gap-1">

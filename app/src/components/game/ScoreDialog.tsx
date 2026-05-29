@@ -10,18 +10,26 @@ import {
 } from "@/components/ui/dialog";
 import { COLOR_NAMES } from "@/lib/constants";
 import type { BoardConfig, RoomPlayerRow } from "@/types/game";
+import type { ScoringContext } from "@/lib/game/scoring";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   players: RoomPlayerRow[];
   config: BoardConfig;
+  scoringContext?: ScoringContext;
 }
 
-export function ScoreDialog({ open, onOpenChange, players, config }: Props) {
+export function ScoreDialog({
+  open,
+  onOpenChange,
+  players,
+  config,
+  scoringContext,
+}: Props) {
   const scores = players.map((p) => ({
     player: p,
-    breakdown: computeScore(config, p, players),
+    breakdown: computeScore(config, p, players, scoringContext),
   }));
 
   return (
@@ -112,6 +120,13 @@ export function ScoreDialog({ open, onOpenChange, players, config }: Props) {
                         className={`font-medium ${breakdown.stars < 0 ? "text-red-500" : "text-gray-700"}`}
                       >
                         {breakdown.stars}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between gap-3">
+                      <span>Wildcards</span>
+                      <span className="font-medium text-gray-700">
+                        +{breakdown.wildcards}
                       </span>
                     </div>
                   </div>

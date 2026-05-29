@@ -73,7 +73,7 @@ Each player starts with **6 wildcard slots**. Wildcards are consumed whenever a 
 - A player with 0 wildcards remaining **cannot pick** a wildcard die; the UI must prevent it
 - When a player selects the `✕` die, they must declare **one** color before selecting cells. All cells crossed on that turn must be that declared color — the wildcard does not permit mixing colors. The declared color is locked in by whichever cell the player clicks first.
 
-There is no way to earn additional wildcards — they are a finite resource that depletes over the game. There is no end-game scoring for unused wildcards.
+There is no way to earn additional wildcards — they are a finite resource that depletes over the game. At game end, each unused wildcard slot is worth **+1 point**. For example, a player with 3 unused wildcards scores **+3 points**.
 
 ### Dice
 
@@ -156,6 +156,9 @@ First player to cross off every cell of a color: **+5 pts**. Each subsequent pla
 
 #### End-game cell values
 - Each uncrossed **star cell** (☆) on your sheet: **−2 pts**
+
+#### Unused wildcards
+Each unused wildcard slot at game end is worth **+1 point**. For example, 3 unused wildcards score **+3 points**.
 
 ---
 

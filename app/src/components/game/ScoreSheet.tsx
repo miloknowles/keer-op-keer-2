@@ -11,6 +11,7 @@ interface ScoreSheetProps {
   onCellClick?: (cellKey: string) => void;
   myCompletedRows?: string[];
   myCompletedCols?: string[];
+  firstClaimedCols?: string[];
   firstTakenRows?: string[];
   firstTakenCols?: string[];
   /** Heart count recorded at the moment each column was completed. Key = column letter. */
@@ -28,6 +29,7 @@ export function ScoreSheet({
   onCellClick,
   myCompletedRows = [],
   myCompletedCols = [],
+  firstClaimedCols = [],
   firstTakenRows = [],
   firstTakenCols = [],
   columnHeartBonuses = {},
@@ -41,6 +43,7 @@ export function ScoreSheet({
   const selectedSet = new Set(selectedCells);
   const myCompletedRowSet = new Set(myCompletedRows);
   const myCompletedColSet = new Set(myCompletedCols);
+  const firstClaimedColSet = new Set(firstClaimedCols);
   const firstTakenRowSet = new Set(firstTakenRows);
   const firstTakenColSet = new Set(firstTakenCols);
 
@@ -79,11 +82,10 @@ export function ScoreSheet({
                 className={cn(
                   "w-8 h-10 shrink-0 rounded flex items-center justify-center text-xs font-bold",
                   myClaimed && "bg-kok-green/20 text-kok-green",
-                  missed && "text-gray-300 line-through",
-                  !myClaimed && !missed && "text-gray-700",
+                  !myClaimed && "text-gray-700",
                 )}
               >
-                {missed ? rowBonus : rowBonus}
+                {rowBonus}
               </div>
 
               {/* Row item reward cell */}
@@ -192,7 +194,9 @@ export function ScoreSheet({
             >
           )[col];
           const myClaimed = myCompletedColSet.has(col);
-          const someoneElseFirst = firstTakenColSet.has(col) && !myClaimed;
+          const viewerClaimedFirst = firstClaimedColSet.has(col);
+          const someoneElseFirst =
+            firstTakenColSet.has(col) && !viewerClaimedFirst;
           const heartBonus = columnHeartBonuses[col];
           const heartRecorded = heartBonus !== undefined;
 
@@ -202,7 +206,7 @@ export function ScoreSheet({
               <div
                 className={cn(
                   "w-10 h-10 rounded flex items-center justify-center text-xs font-bold",
-                  myClaimed && "bg-kok-green/20 text-kok-green",
+                  viewerClaimedFirst && "bg-kok-green/20 text-kok-green",
                   someoneElseFirst && "text-gray-300 line-through",
                   !myClaimed &&
                     !someoneElseFirst &&
@@ -215,8 +219,13 @@ export function ScoreSheet({
               <div
                 className={cn(
                   "w-10 h-10 rounded flex items-center justify-center text-[10px]",
-                  someoneElseFirst && "bg-gray-100 text-gray-600 font-semibold",
-                  !someoneElseFirst && "text-gray-400",
+                  myClaimed &&
+                    !viewerClaimedFirst &&
+                    "bg-kok-green/20 text-kok-green font-semibold",
+                  !myClaimed &&
+                    someoneElseFirst &&
+                    "bg-gray-100 text-gray-600 font-semibold",
+                  (viewerClaimedFirst || !someoneElseFirst) && "text-gray-400",
                 )}
               >
                 {col === "H" ? "📦" : bonus?.subsequent}
