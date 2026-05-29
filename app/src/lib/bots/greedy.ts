@@ -173,7 +173,7 @@ function findBestBombBlock(
   crossedCells: string[],
   alreadyCrossingCells: string[],
 ): string[] | null {
-  const occupiedSet = new Set([...crossedCells, ...alreadyCrossingCells]);
+  const alreadyCountedSet = new Set([...crossedCells, ...alreadyCrossingCells]);
   const cols = config.grid.columns;
   const rows = config.grid.rows;
 
@@ -188,11 +188,15 @@ function findBestBombBlock(
         `${cols[ci]}-${rows[ri + 1]}`,
         `${cols[ci + 1]}-${rows[ri + 1]}`,
       ];
-      // All four cells must exist on the board and not already be occupied
-      if (!block.every((k) => k in config.cells && !occupiedSet.has(k))) continue;
+      // All four cells must exist on the board. Already-crossed cells are legal
+      // bomb targets; they just do not add any new value.
+      if (!block.every((k) => k in config.cells)) continue;
 
-      // Score: prefer blocks with star cells
-      const score = block.reduce((s, k) => s + cellValue(config, k), 0);
+      // Score: prefer blocks with newly-crossed star cells.
+      const score = block.reduce(
+        (s, k) => s + (alreadyCountedSet.has(k) ? 0 : cellValue(config, k)),
+        0,
+      );
       if (score > bestScore) {
         bestScore = score;
         bestBlock = block;

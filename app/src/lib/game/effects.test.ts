@@ -130,3 +130,41 @@ describe("computePickResult — row items", () => {
     expect(result.boxes_unlocked).toBe(1);
   });
 });
+
+describe("computePickResult — bombs", () => {
+  it("does not duplicate already-crossed bomb cells or re-award their effects", () => {
+    const player = makePlayer({ crossed_cells: ["A-R", "B-R"] });
+    const pick: GamePick = {
+      type: "special",
+      cells: ["A-R", "B-R", "A-S", "B-S"],
+    };
+    const result = computePickResult(
+      config,
+      player,
+      pick,
+      { ...roll, special: "bomb" },
+      [],
+    );
+
+    expect(result.crossed_cells).toEqual(["A-R", "B-R", "A-S", "B-S"]);
+    expect(result.boxes_unlocked).toBe(1);
+    expect(result.boxes_spent).toBe(1);
+  });
+
+  it("counts a cell crossed by both the main pick and bomb only once", () => {
+    const pick: GamePick = {
+      type: "color_number",
+      color_die: 0,
+      number_die: 0,
+      declared_color: "y",
+      declared_number: 1,
+      cells: ["B-R"],
+      bomb_cells: ["A-R", "B-R", "A-S", "B-S"],
+    };
+
+    const result = computePickResult(config, makePlayer(), pick, roll, []);
+
+    expect(result.crossed_cells).toEqual(["B-R", "A-R", "A-S", "B-S"]);
+    expect(result.boxes_unlocked).toBe(2);
+  });
+});

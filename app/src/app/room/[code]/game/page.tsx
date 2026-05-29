@@ -650,13 +650,8 @@ export default function GamePage() {
   // Valid cells for the row-bomb 2×2 placement step — mirrors getValidCells bomb logic.
   const rowBombValidCells = useMemo<Set<string> | undefined>(() => {
     if (!inRowBombMode) return undefined;
-    const crossedSet = new Set(effectiveMe.crossed_cells as string[]);
     if (rowBombCells.length === 0) {
-      const result = new Set<string>();
-      for (const key of Object.keys(boardConfig.cells)) {
-        if (!crossedSet.has(key)) result.add(key);
-      }
-      return result;
+      return new Set<string>(Object.keys(boardConfig.cells));
     }
     if (rowBombCells.length >= 4) return new Set<string>();
     const selIndices = rowBombCells.map((k) => {
@@ -681,14 +676,14 @@ export default function GamePage() {
           for (let dr = 0; dr <= 1; dr++) {
             const key = `${boardConfig.grid.columns[ac + dc]}-${boardConfig.grid.rows[ar + dr]}`;
             if (!(key in boardConfig.cells)) continue;
-            if (crossedSet.has(key) || rowBombCells.includes(key)) continue;
+            if (rowBombCells.includes(key)) continue;
             result.add(key);
           }
         }
       }
     }
     return result;
-  }, [inRowBombMode, rowBombCells, boardConfig, effectiveMe.crossed_cells]);
+  }, [inRowBombMode, rowBombCells, boardConfig]);
 
   const hintText = useMemo<string | null>(
     () =>
@@ -1115,6 +1110,7 @@ export default function GamePage() {
           open={gameOverOpen}
           onOpenChange={setGameOverOpen}
           players={players}
+          config={boardConfig}
         />
 
         {/* History column — always mounted to preserve subscription */}

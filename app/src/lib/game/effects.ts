@@ -22,7 +22,13 @@ export function computePickResult(
   const pickedCells = pick.type === "pass" ? [] : (pick.cells ?? []);
   const bombCells =
     pick.type !== "pass" && pick.bomb_cells ? pick.bomb_cells : [];
-  const newCrossedCells = [...player.crossed_cells, ...pickedCells, ...bombCells];
+  const newCrossedCells = [...player.crossed_cells];
+  const newCrossedSet = new Set(newCrossedCells);
+  for (const key of [...pickedCells, ...bombCells]) {
+    if (newCrossedSet.has(key)) continue;
+    newCrossedCells.push(key);
+    newCrossedSet.add(key);
+  }
   const prevCrossedSet = new Set(player.crossed_cells);
 
   // Wildcard deduction

@@ -11,6 +11,7 @@ import {
   validateColorNumberPick,
   validateSpecialPick,
   validateBombCells,
+  getValidCells,
 } from "./rules";
 
 import rawBoard from "@/boards/kok2-standard.json";
@@ -294,6 +295,34 @@ describe("validateColorNumberPick — bomb row", () => {
     };
     const resultWithBomb = validateColorNumberPick(config, pickWithBomb, roll, player, null, true, 1);
     expect(resultWithBomb.valid).toBe(true);
+  });
+
+  it("accepts bomb_cells containing already-crossed cells", () => {
+    const rowQCells = config.grid.columns
+      .map((col) => `${col}-Q`)
+      .filter((key) => key in config.cells);
+    const lastCell = rowQCells[rowQCells.length - 1];
+    const crossedExceptLast = rowQCells.slice(0, -1);
+    const cellColor = config.cells[lastCell].color;
+    const player = makePlayer({ crossed_cells: crossedExceptLast, wildcards: 6 });
+    const roll: DiceRoll = {
+      colors: ["✕", "p", "o"],
+      numbers: ["1", "2", "3"],
+      special: "fill",
+    };
+    const pick: ColorNumberPick = {
+      type: "color_number",
+      color_die: 0,
+      number_die: 0,
+      declared_color: cellColor,
+      declared_number: 1,
+      cells: [lastCell],
+      bomb_cells: ["A-Q", "B-Q", "A-R", "B-R"],
+    };
+
+    const result = validateColorNumberPick(config, pick, roll, player, null, true, 1);
+
+    expect(result.valid).toBe(true);
   });
 
   it("requires bomb_cells for a same-round second bomb-row completer", () => {
@@ -723,7 +752,7 @@ describe("validateSpecialPick — bomb", () => {
     expect(result.valid).toBe(false);
   });
 
-  it("rejects already-crossed cells", () => {
+  it("accepts already-crossed cells", () => {
     const player = makePlayer({ crossed_cells: ["A-P"] });
     const pick: SpecialPick = {
       type: "special",
@@ -731,10 +760,38 @@ describe("validateSpecialPick — bomb", () => {
     };
     const roll = makeRoll({ special: "bomb" });
     const result = validateSpecialPick(config, pick, roll, player);
-    expect(result.valid).toBe(false);
-    expect((result as { valid: false; error: string }).error).toMatch(
-      /crossed/i,
+    expect(result.valid).toBe(true);
+  });
+});
+
+describe("getValidCells — bomb", () => {
+  it("includes crossed cells and excludes only already-selected cells", () => {
+    const dice = makeRoll({ special: "bomb" });
+
+    const initial = getValidCells(
+      config,
+      ["A-P"],
+      dice,
+      true,
+      undefined,
+      undefined,
+      [],
     );
+    expect(initial?.has("A-P")).toBe(true);
+
+    const next = getValidCells(
+      config,
+      ["A-P"],
+      dice,
+      true,
+      undefined,
+      undefined,
+      ["A-P"],
+    );
+    expect(next?.has("A-P")).toBe(false);
+    expect(next?.has("B-P")).toBe(true);
+    expect(next?.has("A-Q")).toBe(true);
+    expect(next?.has("B-Q")).toBe(true);
   });
 });
 

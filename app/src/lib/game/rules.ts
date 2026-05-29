@@ -242,11 +242,6 @@ export function validateColorNumberPick(
   if (pick.bomb_cells && pick.bomb_cells.length > 0) {
     const bombResult = validateBombCells(config, pick.bomb_cells);
     if (!bombResult.valid) return fail(`bomb_cells: ${bombResult.error}`);
-    const allCrossedAfterPick = new Set(buildingCrossed);
-    for (const bk of pick.bomb_cells) {
-      if (allCrossedAfterPick.has(bk))
-        return fail(`bomb cell ${bk} is already crossed`);
-    }
   }
 
   return ok();
@@ -352,9 +347,6 @@ export function validateSpecialPick(
 
     case "bomb": {
       if (cells.length !== BOMB_CELL_COUNT) return fail("bomb requires exactly 4 cells");
-      for (const key of cells) {
-        if (crossedSet.has(key)) return fail(`cell ${key} is already crossed`);
-      }
       const bombResult = validateBombCells(config, cells);
       if (!bombResult.valid) return bombResult;
       break;
@@ -396,11 +388,6 @@ export function validateSpecialPick(
   if (pick.bomb_cells && pick.bomb_cells.length > 0) {
     const bombResult = validateBombCells(config, pick.bomb_cells);
     if (!bombResult.valid) return fail(`bomb_cells: ${bombResult.error}`);
-    const allCrossedAfterPick = new Set(allCrossedAfterSpecial);
-    for (const bk of pick.bomb_cells) {
-      if (allCrossedAfterPick.has(bk))
-        return fail(`bomb cell ${bk} is already crossed`);
-    }
   }
 
   return ok();
@@ -463,11 +450,7 @@ export function getValidCells(
       case "bomb": {
         if (selectedCells.length >= 4) return new Set<string>();
         if (selectedCells.length === 0) {
-          const result = new Set<string>();
-          for (const key of Object.keys(config.cells)) {
-            if (!crossedSet.has(key)) result.add(key);
-          }
-          return result;
+          return new Set<string>(Object.keys(config.cells));
         }
         const selIndices = selectedCells.map((k) => {
           const [col, row] = k.split("-");
@@ -500,8 +483,7 @@ export function getValidCells(
               for (let dr = 0; dr <= 1; dr++) {
                 const key = `${config.grid.columns[ac + dc]}-${config.grid.rows[ar + dr]}`;
                 if (!(key in config.cells)) continue;
-                if (crossedSet.has(key) || selectedCells.includes(key))
-                  continue;
+                if (selectedCells.includes(key)) continue;
                 result.add(key);
               }
             }

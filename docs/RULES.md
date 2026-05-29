@@ -61,6 +61,8 @@ Bombs are earned when a player completes a bomb-item row in the first round wher
 
 The bomb from the special die works the same way: it is applied immediately as part of using the special die.
 
+A bomb block may include cells that are already crossed off. The chosen 2×2 block is still legal; only cells that were not already crossed add new marks or trigger cell effects.
+
 ---
 
 ## Wildcard Track

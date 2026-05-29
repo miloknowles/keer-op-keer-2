@@ -62,6 +62,8 @@ Bombs are earned when a player completes a bomb-item row in the first round wher
 
 The bomb from the special die works the same way: it is applied immediately as part of using the special die.
 
+A bomb block may include cells that are already crossed off. The chosen 2×2 block is still recorded as the bomb target, but only cells that were not already crossed add new marks or trigger cell effects.
+
 ### Wildcard Track
 
 Each player starts with **6 wildcard slots**. Wildcards are consumed whenever a player picks a wildcard die — the `?` number die or the `✕` color die.
