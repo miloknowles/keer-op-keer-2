@@ -2,22 +2,33 @@ import type { BoardConfig } from "@/boards/board.types";
 import type { GamePick, DiceRoll, RoomPlayerRow, PickResult } from "../../types/game";
 import { isColorWildcard, isNumberWildcard } from "./dice";
 import { isRowComplete, isColumnComplete, getCell } from "./sheet";
+import {
+  type CurrentRoundPicks,
+  wasRowCompletedByOthersBeforeRound,
+} from "./rules";
 
 export type { PickResult };
 
 // Computes the player's new state after applying a pick. Pure — no DB I/O.
-// `otherPlayers` is used to determine row-completion "first completer" bonuses.
+// `otherPlayers` is used to determine whether row items were already claimed before this round.
 export function computePickResult(
   config: BoardConfig,
   player: RoomPlayerRow,
   pick: GamePick,
   roll: DiceRoll,
-  otherPlayers: Pick<RoomPlayerRow, "crossed_cells">[],
+  otherPlayers: Pick<RoomPlayerRow, "id" | "crossed_cells">[],
+  currentRoundPicks: CurrentRoundPicks = {},
 ): PickResult {
   const pickedCells = pick.type === "pass" ? [] : (pick.cells ?? []);
   const bombCells =
     pick.type !== "pass" && pick.bomb_cells ? pick.bomb_cells : [];
-  const newCrossedCells = [...player.crossed_cells, ...pickedCells, ...bombCells];
+  const newCrossedCells = [...player.crossed_cells];
+  const newCrossedSet = new Set(newCrossedCells);
+  for (const key of [...pickedCells, ...bombCells]) {
+    if (newCrossedSet.has(key)) continue;
+    newCrossedCells.push(key);
+    newCrossedSet.add(key);
+  }
   const prevCrossedSet = new Set(player.crossed_cells);
 
   // Wildcard deduction
@@ -50,12 +61,16 @@ export function computePickResult(
     }
   }
 
-  // Row completion bonuses — only awarded to the first completer
+  // Row item bonuses — awarded to players who complete the row in its first completion round.
   for (const row of config.grid.rows) {
     if (isRowComplete(config, row, player.crossed_cells)) continue;
     if (!isRowComplete(config, row, newCrossedCells)) continue;
-    const alreadyCompletedByOther = otherPlayers.some((p) =>
-      isRowComplete(config, row, p.crossed_cells as string[]),
+    const alreadyCompletedByOther = wasRowCompletedByOthersBeforeRound(
+      config,
+      row,
+      player.id,
+      otherPlayers,
+      currentRoundPicks,
     );
     if (alreadyCompletedByOther) continue;
 

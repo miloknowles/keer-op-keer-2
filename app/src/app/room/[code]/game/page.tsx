@@ -12,7 +12,10 @@ import {
   getConnectedRegion,
 } from "@/lib/game/sheet";
 import { isColorWildcard, isNumberWildcard } from "@/lib/game/dice";
-import { getValidCells } from "@/lib/game/rules";
+import {
+  getValidCells,
+  wasRowCompletedByOthersBeforeRound,
+} from "@/lib/game/rules";
 import { computeHintText } from "@/lib/game/hint";
 import { COLOR_NAMES, MEDALS, SEAT_TO_COLOR } from "@/lib/constants";
 import { ScoreSheet } from "@/components/game/ScoreSheet";
@@ -288,9 +291,22 @@ export default function GamePage() {
     return boardConfig.grid.rows.some((row) => {
       if (isRowComplete(boardConfig, row, effectiveMe.crossed_cells as string[])) return false;
       if (!isRowComplete(boardConfig, row, after)) return false;
-      return (boardConfig.scoring.rowItems as Record<string, string>)[row] === "bomb";
+      if ((boardConfig.scoring.rowItems as Record<string, string>)[row] !== "bomb") {
+        return false;
+      }
+      return !wasRowCompletedByOthersBeforeRound(
+        boardConfig,
+        row,
+        effectiveMe.id,
+        players.filter((p) => p.id !== effectiveMe.id),
+        {
+          activePlayerId: currentHistory?.active_player_id,
+          activePick: currentHistory?.active_pick,
+          playerPicks: currentHistory?.player_picks,
+        },
+      );
     });
-  }, [selectedCells, effectiveMe.crossed_cells, boardConfig]);
+  }, [selectedCells, effectiveMe, boardConfig, players, currentHistory]);
 
   const playerMedals = useMemo<Record<string, string>>(() => {
     if (room.status !== "finished") return {};
@@ -634,13 +650,8 @@ export default function GamePage() {
   // Valid cells for the row-bomb 2×2 placement step — mirrors getValidCells bomb logic.
   const rowBombValidCells = useMemo<Set<string> | undefined>(() => {
     if (!inRowBombMode) return undefined;
-    const crossedSet = new Set(effectiveMe.crossed_cells as string[]);
     if (rowBombCells.length === 0) {
-      const result = new Set<string>();
-      for (const key of Object.keys(boardConfig.cells)) {
-        if (!crossedSet.has(key)) result.add(key);
-      }
-      return result;
+      return new Set<string>(Object.keys(boardConfig.cells));
     }
     if (rowBombCells.length >= 4) return new Set<string>();
     const selIndices = rowBombCells.map((k) => {
@@ -665,14 +676,14 @@ export default function GamePage() {
           for (let dr = 0; dr <= 1; dr++) {
             const key = `${boardConfig.grid.columns[ac + dc]}-${boardConfig.grid.rows[ar + dr]}`;
             if (!(key in boardConfig.cells)) continue;
-            if (crossedSet.has(key) || rowBombCells.includes(key)) continue;
+            if (rowBombCells.includes(key)) continue;
             result.add(key);
           }
         }
       }
     }
     return result;
-  }, [inRowBombMode, rowBombCells, boardConfig, effectiveMe.crossed_cells]);
+  }, [inRowBombMode, rowBombCells, boardConfig]);
 
   const hintText = useMemo<string | null>(
     () =>
@@ -1099,6 +1110,7 @@ export default function GamePage() {
           open={gameOverOpen}
           onOpenChange={setGameOverOpen}
           players={players}
+          config={boardConfig}
         />
 
         {/* History column — always mounted to preserve subscription */}

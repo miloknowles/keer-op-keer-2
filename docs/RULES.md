@@ -32,7 +32,7 @@ Each player's sheet has a **heart track** — 5 heart slots labeled 1 through 5,
 
 **Earning hearts:** A player advances their heart track (crosses off the next slot) when they:
 - Use the special die and it shows a Heart face, or
-- Are the first player to complete a row whose item is a heart
+- Complete a heart-item row in the first round where that row is completed
 
 **Heart bonus on column completion:** Whenever a player completes a column, they earn their **current heart count as a bonus** on top of the column's printed first/subsequent value. So a player with 3 hearts crossed off gets +3 on every column they complete from that point forward.
 
@@ -46,7 +46,7 @@ Each player's sheet has a row of **9 boxes** at the bottom. Players start with *
 
 **Earning boxes:** Circle the next uncircled box when you:
 - Cross off a cell that has a box icon (!) on it, or
-- Are the first to complete a row whose item is a box, or
+- Complete a box-item row in the first round where that row is completed, or
 - Complete column H — **every** player who completes column H earns a box, not just the first
 
 **Spending boxes:** On your turn as active player, you may spend 1 box to use the special die instead of picking a color+number pair. Cross off (spend) one of your circled boxes.
@@ -57,9 +57,11 @@ The box track caps at 9. Uncircled boxes are unearned; there is no end-game scor
 
 ## Bombs
 
-Bombs are earned when a player is first to complete a row whose item is a bomb. **Bombs must be played immediately** on the same turn they are earned — they cannot be held. After crossing off the cells that completed the row, the player immediately chooses a 2×2 block anywhere on the board and crosses those off too, before their turn ends.
+Bombs are earned when a player completes a bomb-item row in the first round where that row is completed. **Bombs must be played immediately** on the same turn they are earned — they cannot be held. After crossing off the cells that completed the row, the player immediately chooses a 2×2 block anywhere on the board and crosses those off too, before their turn ends.
 
 The bomb from the special die works the same way: it is applied immediately as part of using the special die.
+
+A bomb block may include cells that are already crossed off. The chosen 2×2 block is still legal; only cells that were not already crossed add new marks or trigger cell effects.
 
 ---
 
@@ -151,7 +153,7 @@ The heart bonus earned per column is recorded at the time of completion — it i
 
 ### Row bonuses (P–V)
 
-The first player to cross off every cell in a row earns **5 points** and the row's **item** (box, bomb, or heart). Subsequent completers also earn **5 points** but do **not** receive the item.
+Every player who crosses off every cell in a row earns **5 points**. The row's **item** (box, bomb, or heart) is earned by each player who completes that row in the first round where anyone completes it. Players who complete that row in later rounds still earn **5 points** but do **not** receive the item.
 
 | Row | P | Q | R | S | T | U | V |
 |---|---|---|---|---|---|---|---|

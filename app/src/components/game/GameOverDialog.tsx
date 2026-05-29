@@ -7,13 +7,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import type { BoardConfig } from "@/boards/board.types";
 import { COLOR_NAMES } from "@/lib/constants";
+import { computeScore } from "@/lib/game/scoring";
 import type { RoomPlayerRow, ScoreBreakdown, Color } from "@/types/game";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   players: RoomPlayerRow[];
+  config: BoardConfig;
 }
 
 const RANK_MEDALS = ["🥇", "🥈", "🥉"];
@@ -28,9 +31,17 @@ function colorTotal(bd: ScoreBreakdown) {
   return Object.values(bd.colors).reduce((a, b) => a + b, 0);
 }
 
-export function GameOverDialog({ open, onOpenChange, players }: Props) {
-  const scoresReady = players.every((p) => p.score !== null);
-  const sorted = [...players].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+export function GameOverDialog({ open, onOpenChange, players, config }: Props) {
+  const scoredPlayers = players.map((player) => {
+    const breakdown =
+      player.score_breakdown ?? computeScore(config, player, players);
+    return {
+      ...player,
+      score: player.score ?? breakdown.total,
+      score_breakdown: breakdown,
+    };
+  });
+  const sorted = [...scoredPlayers].sort((a, b) => b.score - a.score);
   const winner = sorted[0];
 
   return (
@@ -40,7 +51,7 @@ export function GameOverDialog({ open, onOpenChange, players }: Props) {
           <DialogTitle className="text-xl">Game Over!</DialogTitle>
         </DialogHeader>
 
-        {!scoresReady ? (
+        {players.length === 0 ? (
           <p className="text-sm text-gray-400 italic py-4 text-center">
             Calculating final scores…
           </p>

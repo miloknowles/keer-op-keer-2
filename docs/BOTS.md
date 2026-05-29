@@ -123,7 +123,7 @@ Every uncrossed cell of the target color that passes `isValidPlacement` is tried
 
 ### Step 3 — Handle bomb rows
 
-If the winning group would complete a row whose `rowItems` value is `"bomb"`, the bot must also choose a 2×2 bomb block. `findBestBombBlock` scans all valid 2×2 blocks (all four cells must exist on the board and be uncrossed), scores each by how many star cells it contains (stars are worth +2 each to eliminate the end-game penalty), and returns the best block. If no valid block exists, that pick is skipped entirely and the bot falls back to the next-best pair.
+If the winning group would complete a row whose `rowItems` value is `"bomb"`, the bot must also choose a 2×2 bomb block. `findBestBombBlock` scans all complete 2×2 blocks where all four cells exist on the board, allowing cells that are already crossed off. It scores only cells that would be newly crossed, preferring blocks with newly-crossed star cells (stars are worth +2 each to eliminate the end-game penalty), and returns the best block. If no valid block exists, that pick is skipped entirely and the bot falls back to the next-best pair.
 
 ### Step 4 — Return the best pick or pass
 

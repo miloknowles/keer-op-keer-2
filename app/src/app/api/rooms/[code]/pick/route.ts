@@ -77,7 +77,7 @@ export async function POST(
   const { data: history } = await supabase
     .from("room_history")
     .select(
-      "id, dice_colors, dice_numbers, dice_special, active_pick, player_picks",
+      "id, active_player_id, dice_colors, dice_numbers, dice_special, active_pick, player_picks",
     )
     .eq("room_id", room.id)
     .eq("round_number", room.round_number)
@@ -132,8 +132,21 @@ export async function POST(
 
   const playerRow = me as unknown as RoomPlayerRow;
   const activePick = history.active_pick as GamePick | null;
+  const playerPicks = (history.player_picks ?? {}) as Record<string, GamePick>;
 
-  // ── 9. Server-side validation ─────────────────────────────────────────────
+  // ── 9. Load other players for row item eligibility checks ────────────────
+  const { data: allPlayers } = await supabase
+    .from("room_players")
+    .select("id, crossed_cells")
+    .eq("room_id", room.id);
+  const otherPlayers = (allPlayers ?? []).filter((p) => p.id !== me.id);
+  const currentRoundPicks = {
+    activePlayerId: history.active_player_id as string,
+    activePick,
+    playerPicks,
+  };
+
+  // ── 10. Server-side validation ────────────────────────────────────────────
   if (pick.type === "color_number") {
     const result = validateColorNumberPick(
       config,
@@ -143,11 +156,23 @@ export async function POST(
       activePick,
       isActivePlayer,
       room.round_number,
+      otherPlayers,
+      currentRoundPicks,
     );
     if (!result.valid)
       return NextResponse.json({ error: result.error }, { status: 400 });
   } else if (pick.type === "special") {
-    const result = validateSpecialPick(config, pick, roll, playerRow, activePick, isActivePlayer, room.round_number);
+    const result = validateSpecialPick(
+      config,
+      pick,
+      roll,
+      playerRow,
+      activePick,
+      isActivePlayer,
+      room.round_number,
+      otherPlayers,
+      currentRoundPicks,
+    );
     if (!result.valid)
       return NextResponse.json({ error: result.error }, { status: 400 });
   } else if (pick.type === "pass") {
@@ -156,7 +181,7 @@ export async function POST(
     return NextResponse.json({ error: "Unknown pick type" }, { status: 400 });
   }
 
-  // ── 10. Write pick to room_history ────────────────────────────────────────
+  // ── 11. Write pick to room_history ────────────────────────────────────────
   if (isActivePlayer) {
     const { error: historyErr } = await supabase
       .from("room_history")
@@ -184,15 +209,15 @@ export async function POST(
     }
   }
 
-  // ── 11. Load other players for row-completion bonus check ────────────────
-  const { data: allPlayers } = await supabase
-    .from("room_players")
-    .select("id, crossed_cells")
-    .eq("room_id", room.id);
-  const otherPlayers = (allPlayers ?? []).filter((p) => p.id !== me.id);
-
   // ── 12. Compute updated player state (pure) ───────────────────────────────
-  const result = computePickResult(config, playerRow, pick, roll, otherPlayers);
+  const result = computePickResult(
+    config,
+    playerRow,
+    pick,
+    roll,
+    otherPlayers,
+    currentRoundPicks,
+  );
 
   // ── 13. Write updated player row ──────────────────────────────────────────
   const { error: playerErr } = await supabase

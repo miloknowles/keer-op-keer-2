@@ -26,16 +26,75 @@ const THREE_IN_A_ROW_MAX = 3;
 const VALID_NUMBER_MIN = 1;
 const VALID_NUMBER_MAX = 5;
 
+export type CurrentRoundPicks = {
+  activePlayerId?: string | null;
+  activePick?: GamePick | null;
+  playerPicks?: Record<string, GamePick> | null;
+};
+
+type RowCompletionPlayer = Pick<RoomPlayerRow, "id" | "crossed_cells">;
+
+function cellsCrossedByPick(pick: GamePick | null | undefined): string[] {
+  if (!pick || pick.type === "pass") return [];
+  return [...pick.cells, ...(pick.bomb_cells ?? [])];
+}
+
+export function crossedCellsAtRoundStart(
+  crossedCells: string[],
+  pick: GamePick | null | undefined,
+): string[] {
+  const currentRoundCells = new Set(cellsCrossedByPick(pick));
+  if (currentRoundCells.size === 0) return crossedCells;
+  return crossedCells.filter((key) => !currentRoundCells.has(key));
+}
+
+function pickForPlayer(
+  playerId: string,
+  currentRoundPicks: CurrentRoundPicks,
+): GamePick | null {
+  if (playerId === currentRoundPicks.activePlayerId) {
+    return currentRoundPicks.activePick ?? null;
+  }
+  return currentRoundPicks.playerPicks?.[playerId] ?? null;
+}
+
+export function wasRowCompletedByOthersBeforeRound(
+  config: BoardConfig,
+  row: string,
+  playerId: string,
+  otherPlayers: RowCompletionPlayer[],
+  currentRoundPicks: CurrentRoundPicks = {},
+): boolean {
+  return otherPlayers.some((p) => {
+    if (p.id === playerId) return false;
+    const roundStartCrossed = crossedCellsAtRoundStart(
+      p.crossed_cells as string[],
+      pickForPlayer(p.id, currentRoundPicks),
+    );
+    return isRowComplete(config, row, roundStartCrossed);
+  });
+}
 
 function newlyCompletedBombRows(
   config: BoardConfig,
   beforeCrossed: string[],
   afterCrossed: string[],
+  playerId: string,
+  otherPlayers: RowCompletionPlayer[] = [],
+  currentRoundPicks: CurrentRoundPicks = {},
 ): string[] {
   return config.grid.rows.filter((row) => {
     if (isRowComplete(config, row, beforeCrossed)) return false;
     if (!isRowComplete(config, row, afterCrossed)) return false;
     return (config.scoring.rowItems as Record<string, string>)[row] === "bomb";
+  }).filter((row) => {
+    return !wasRowCompletedByOthersBeforeRound(
+      config,
+      row,
+      playerId,
+      otherPlayers,
+      currentRoundPicks,
+    );
   });
 }
 
@@ -87,6 +146,8 @@ export function validateColorNumberPick(
   activePick: GamePick | null,
   isActivePlayer: boolean,
   round: number,
+  otherPlayers: RowCompletionPlayer[] = [],
+  currentRoundPicks: CurrentRoundPicks = {},
 ): ValidationResult {
   const { color_die, number_die, declared_color, declared_number, cells } =
     pick;
@@ -164,18 +225,23 @@ export function validateColorNumberPick(
   }
 
   // Bomb cells from row completion — required when a bomb-item row is newly completed
-  const bombRowsCompleted = newlyCompletedBombRows(config, player.crossed_cells, buildingCrossed);
+  const bombRowsCompleted = newlyCompletedBombRows(
+    config,
+    player.crossed_cells,
+    buildingCrossed,
+    player.id,
+    otherPlayers,
+    currentRoundPicks,
+  );
   if (bombRowsCompleted.length > 0 && (!pick.bomb_cells || pick.bomb_cells.length === 0)) {
     return fail("must include bomb_cells when completing a bomb row");
+  }
+  if (bombRowsCompleted.length === 0 && pick.bomb_cells && pick.bomb_cells.length > 0) {
+    return fail("bomb_cells are only allowed when earning a bomb row item");
   }
   if (pick.bomb_cells && pick.bomb_cells.length > 0) {
     const bombResult = validateBombCells(config, pick.bomb_cells);
     if (!bombResult.valid) return fail(`bomb_cells: ${bombResult.error}`);
-    const allCrossedAfterPick = new Set(buildingCrossed);
-    for (const bk of pick.bomb_cells) {
-      if (allCrossedAfterPick.has(bk))
-        return fail(`bomb cell ${bk} is already crossed`);
-    }
   }
 
   return ok();
@@ -189,6 +255,8 @@ export function validateSpecialPick(
   activePick: GamePick | null = null,
   isActivePlayer: boolean = true,
   round: number = 1,
+  otherPlayers: RowCompletionPlayer[] = [],
+  currentRoundPicks: CurrentRoundPicks = {},
 ): ValidationResult {
   const availableBoxes = player.boxes_unlocked - player.boxes_spent;
   if (availableBoxes < 1) return fail("no boxes available");
@@ -279,9 +347,6 @@ export function validateSpecialPick(
 
     case "bomb": {
       if (cells.length !== BOMB_CELL_COUNT) return fail("bomb requires exactly 4 cells");
-      for (const key of cells) {
-        if (crossedSet.has(key)) return fail(`cell ${key} is already crossed`);
-      }
       const bombResult = validateBombCells(config, cells);
       if (!bombResult.valid) return bombResult;
       break;
@@ -306,18 +371,23 @@ export function validateSpecialPick(
 
   // Bomb cells from row completion — required when a bomb-item row is newly completed
   const allCrossedAfterSpecial = [...player.crossed_cells, ...cells];
-  const bombRowsCompletedBySpecial = newlyCompletedBombRows(config, player.crossed_cells, allCrossedAfterSpecial);
+  const bombRowsCompletedBySpecial = newlyCompletedBombRows(
+    config,
+    player.crossed_cells,
+    allCrossedAfterSpecial,
+    player.id,
+    otherPlayers,
+    currentRoundPicks,
+  );
   if (bombRowsCompletedBySpecial.length > 0 && (!pick.bomb_cells || pick.bomb_cells.length === 0)) {
     return fail("must include bomb_cells when completing a bomb row");
+  }
+  if (bombRowsCompletedBySpecial.length === 0 && pick.bomb_cells && pick.bomb_cells.length > 0) {
+    return fail("bomb_cells are only allowed when earning a bomb row item");
   }
   if (pick.bomb_cells && pick.bomb_cells.length > 0) {
     const bombResult = validateBombCells(config, pick.bomb_cells);
     if (!bombResult.valid) return fail(`bomb_cells: ${bombResult.error}`);
-    const allCrossedAfterPick = new Set(allCrossedAfterSpecial);
-    for (const bk of pick.bomb_cells) {
-      if (allCrossedAfterPick.has(bk))
-        return fail(`bomb cell ${bk} is already crossed`);
-    }
   }
 
   return ok();
@@ -380,11 +450,7 @@ export function getValidCells(
       case "bomb": {
         if (selectedCells.length >= 4) return new Set<string>();
         if (selectedCells.length === 0) {
-          const result = new Set<string>();
-          for (const key of Object.keys(config.cells)) {
-            if (!crossedSet.has(key)) result.add(key);
-          }
-          return result;
+          return new Set<string>(Object.keys(config.cells));
         }
         const selIndices = selectedCells.map((k) => {
           const [col, row] = k.split("-");
@@ -417,8 +483,7 @@ export function getValidCells(
               for (let dr = 0; dr <= 1; dr++) {
                 const key = `${config.grid.columns[ac + dc]}-${config.grid.rows[ar + dr]}`;
                 if (!(key in config.cells)) continue;
-                if (crossedSet.has(key) || selectedCells.includes(key))
-                  continue;
+                if (selectedCells.includes(key)) continue;
                 result.add(key);
               }
             }
