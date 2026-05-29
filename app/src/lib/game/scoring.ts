@@ -58,7 +58,8 @@ export function computeScore(
     const bonusDef = config.scoring.columnBonuses[col];
     const isFirst = isFirstCompleter(colCells, player, allPlayers);
     const printed = isFirst ? bonusDef.first : bonusDef.subsequent;
-    columns[col] = printed + player.hearts;
+    const heartBonus = player.column_heart_bonuses?.[col] ?? player.hearts;
+    columns[col] = printed + heartBonus;
   }
 
   // Row bonuses — all completers earn points; only the first also earns the item (handled in effects.ts)
