@@ -13,6 +13,7 @@ import {
   uncrossedStars,
   getBoardColors,
 } from "./sheet";
+import { cellsCrossedByPick } from "./rules";
 
 type CompletionKind = "columns" | "colors";
 
@@ -29,11 +30,6 @@ function emptyCompletionRounds(): Record<
   Record<string, number>
 > {
   return { columns: {}, colors: {} };
-}
-
-function cellsCrossedByPick(pick: GamePick | null | undefined): string[] {
-  if (!pick || pick.type === "pass") return [];
-  return [...pick.cells, ...(pick.bomb_cells ?? [])];
 }
 
 function applyPick(crossed: string[], pick: GamePick | null | undefined) {

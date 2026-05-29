@@ -177,6 +177,12 @@ export async function POST(
       return NextResponse.json({ error: result.error }, { status: 400 });
   } else if (pick.type === "pass") {
     // Players may always pass — no legal-move check enforced.
+    if ("bombs" in rawBody || "bomb_cells" in rawBody) {
+      return NextResponse.json(
+        { error: "pass picks cannot include bombs" },
+        { status: 400 },
+      );
+    }
   } else {
     return NextResponse.json({ error: "Unknown pick type" }, { status: 400 });
   }

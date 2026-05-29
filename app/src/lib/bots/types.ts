@@ -7,6 +7,8 @@ export interface BotContext {
   roll: DiceRoll;
   isActivePlayer: boolean;
   activePick: GamePick | null;
+  activePlayerId?: string;
+  playerPicks?: Record<string, GamePick>;
   round: number;
   allPlayers: RoomPlayerRow[];
 }

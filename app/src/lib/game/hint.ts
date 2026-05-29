@@ -10,7 +10,8 @@ interface HintParams {
     special: DiceSpecialFace;
   } | null;
   inRowBombMode: boolean;
-  rowBombCells: string[];
+  currentBombCells: string[];
+  bombNumber: number;
   selectedSpecial: boolean;
   selectedColor: 0 | 1 | 2 | undefined;
   selectedNumber: 0 | 1 | 2 | undefined;
@@ -22,7 +23,8 @@ export function computeHintText({
   isMyBoard,
   dice,
   inRowBombMode,
-  rowBombCells,
+  currentBombCells,
+  bombNumber,
   selectedSpecial,
   selectedColor,
   selectedNumber,
@@ -32,9 +34,9 @@ export function computeHintText({
   if (!isMyBoard || !dice) return null;
 
   if (inRowBombMode) {
-    const rem = 4 - rowBombCells.length;
+    const rem = 4 - currentBombCells.length;
     if (rem > 0)
-      return `Row completed! Now place your bomb — pick ${rem} more cell${rem === 1 ? "" : "s"} to form a 2×2`;
+      return `Bomb earned — place bomb ${bombNumber}: pick ${rem} more cell${rem === 1 ? "" : "s"} to form a 2×2`;
     return null;
   }
 

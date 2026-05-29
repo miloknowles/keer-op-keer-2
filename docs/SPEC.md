@@ -58,9 +58,9 @@ The box track caps at 9. Uncircled boxes are unearned; there is no end-game scor
 
 ### Bombs
 
-Bombs are earned when a player completes a bomb-item row in the first round where that row is completed. **Bombs must be played immediately** on the same turn they are earned — they cannot be held. After crossing off the cells that completed the row, the player immediately chooses a 2×2 block anywhere on the board and crosses those off too, before their turn ends.
+Bombs are earned when a player completes a bomb-item row in the first round where that row is completed. **Bombs must be played immediately** on the same turn they are earned — they cannot be held. After crossing off the cells that completed the row, the player immediately chooses a 2×2 block anywhere on the board and crosses those off too, before their turn ends. If that bomb block completes another bomb-item row in its first completion round, the player immediately places another 2×2 block. This chain continues until no new bomb row is earned.
 
-The bomb from the special die works the same way: it is applied immediately as part of using the special die.
+The bomb from the special die works the same way: it is applied immediately as part of using the special die, and it can trigger row-earned follow-up bombs.
 
 A bomb block may include cells that are already crossed off. The chosen 2×2 block is still recorded as the bomb target, but only cells that were not already crossed add new marks or trigger cell effects.
 
@@ -205,20 +205,20 @@ All routes are under `/api/game/`. Authentication is via Supabase session cookie
   declared_color: "pink",    // player's declared value (same as die face if not wildcard)
   declared_number: 3,        // player's declared value (same as die face if not wildcard)
   cells: ["A-P", "A-Q", "A-R"],  // cells to cross off
-  bomb_cells: ["C-Q", "C-R", "D-Q", "D-R"]  // only present if a bomb row was completed this turn
+  bombs: [["C-Q", "D-Q", "C-R", "D-R"]]  // ordered 2x2 blocks earned this turn
 }
 
 // Spending a box to use the special die
 { type: "special",
   cells: [...],              // cells depend on which special face was rolled
-  bomb_cells: [...]          // only present if a bomb row was completed this turn
+  bombs: [[...], [...]]      // ordered follow-up row bombs, if earned
 }
 
 // Passing (no legal move available)
 { type: "pass" }
 ```
 
-The `cells` array lets the server validate placement (adjacency, color match, count) atomically. `bomb_cells` is included inline when a row completion triggered an immediate bomb — the server validates both together.
+The `cells` array lets the server validate placement (adjacency, color match, count) atomically. `bombs` is included inline when row completions triggered immediate bombs — the server validates each 2x2 block in cascade order.
 
 ### Real-Time Sync
 

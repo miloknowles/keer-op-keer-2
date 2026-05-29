@@ -34,9 +34,9 @@ export type CurrentRoundPicks = {
 
 type RowCompletionPlayer = Pick<RoomPlayerRow, "id" | "crossed_cells">;
 
-function cellsCrossedByPick(pick: GamePick | null | undefined): string[] {
+export function cellsCrossedByPick(pick: GamePick | null | undefined): string[] {
   if (!pick || pick.type === "pass") return [];
-  return [...pick.cells, ...(pick.bomb_cells ?? [])];
+  return [...pick.cells, ...(pick.bombs ?? []).flat()];
 }
 
 export function crossedCellsAtRoundStart(
@@ -96,6 +96,141 @@ function newlyCompletedBombRows(
       currentRoundPicks,
     );
   });
+}
+
+type BombCascadeState = {
+  crossedCells: string[];
+  owedRows: string[];
+};
+
+function hasLegacyBombCells(pick: ColorNumberPick | SpecialPick): boolean {
+  return Object.prototype.hasOwnProperty.call(pick, "bomb_cells");
+}
+
+function detectOwedBombRows(
+  config: BoardConfig,
+  beforeCrossed: string[],
+  afterCrossed: string[],
+  playerId: string,
+  awardedRows: Set<string>,
+  otherPlayers: RowCompletionPlayer[],
+  currentRoundPicks: CurrentRoundPicks,
+): string[] {
+  return newlyCompletedBombRows(
+    config,
+    beforeCrossed,
+    afterCrossed,
+    playerId,
+    otherPlayers,
+    currentRoundPicks,
+  ).filter((row) => !awardedRows.has(row));
+}
+
+function applyCells(crossedCells: string[], cells: string[]): string[] {
+  const next = [...crossedCells];
+  const nextSet = new Set(next);
+  for (const key of cells) {
+    if (nextSet.has(key)) continue;
+    next.push(key);
+    nextSet.add(key);
+  }
+  return next;
+}
+
+export function simulateBombCascade(
+  config: BoardConfig,
+  initialCrossed: string[],
+  mainCells: string[],
+  playerId: string,
+  bombs: string[][] = [],
+  otherPlayers: RowCompletionPlayer[] = [],
+  currentRoundPicks: CurrentRoundPicks = {},
+): BombCascadeState {
+  let crossedCells = [...initialCrossed];
+  const awardedRows = new Set<string>();
+  const owedRows: string[] = [];
+
+  let beforeAction = crossedCells;
+  crossedCells = applyCells(crossedCells, mainCells);
+  const pendingRows = detectOwedBombRows(
+    config,
+    beforeAction,
+    crossedCells,
+    playerId,
+    awardedRows,
+    otherPlayers,
+    currentRoundPicks,
+  );
+
+  let bombIndex = 0;
+  while (pendingRows.length > 0) {
+    const row = pendingRows.shift()!;
+    if (awardedRows.has(row)) continue;
+    awardedRows.add(row);
+    owedRows.push(row);
+    if (bombIndex >= bombs.length) {
+      return { crossedCells, owedRows };
+    }
+    beforeAction = crossedCells;
+    crossedCells = applyCells(crossedCells, bombs[bombIndex]);
+    bombIndex += 1;
+
+    const newlyOwed = detectOwedBombRows(
+      config,
+      beforeAction,
+      crossedCells,
+      playerId,
+      awardedRows,
+      otherPlayers,
+      currentRoundPicks,
+    );
+    pendingRows.push(...newlyOwed);
+  }
+
+  return { crossedCells, owedRows };
+}
+
+function validateBombCascade(
+  config: BoardConfig,
+  pick: ColorNumberPick | SpecialPick,
+  initialCrossed: string[],
+  mainCells: string[],
+  playerId: string,
+  otherPlayers: RowCompletionPlayer[],
+  currentRoundPicks: CurrentRoundPicks,
+): ValidationResult {
+  if (hasLegacyBombCells(pick)) {
+    return fail("bomb_cells is no longer supported; use bombs");
+  }
+
+  const bombs = pick.bombs ?? [];
+  if (!Array.isArray(bombs)) return fail("bombs must be an array");
+  for (let i = 0; i < bombs.length; i += 1) {
+    if (!Array.isArray(bombs[i])) {
+      return fail(`bombs[${i}] must be a 2×2 cell array`);
+    }
+    const bombResult = validateBombCells(config, bombs[i]);
+    if (!bombResult.valid) return fail(`bombs[${i}]: ${bombResult.error}`);
+  }
+
+  const cascade = simulateBombCascade(
+    config,
+    initialCrossed,
+    mainCells,
+    playerId,
+    bombs,
+    otherPlayers,
+    currentRoundPicks,
+  );
+
+  if (bombs.length < cascade.owedRows.length) {
+    return fail("must include a bomb block for each completed bomb row");
+  }
+  if (bombs.length > cascade.owedRows.length) {
+    return fail("bombs are only allowed when earning bomb row items");
+  }
+
+  return ok();
 }
 
 function ok(): ValidationResult {
@@ -224,25 +359,16 @@ export function validateColorNumberPick(
     return fail("selected cells must form a single contiguous group");
   }
 
-  // Bomb cells from row completion — required when a bomb-item row is newly completed
-  const bombRowsCompleted = newlyCompletedBombRows(
+  const bombCascadeResult = validateBombCascade(
     config,
+    pick,
     player.crossed_cells,
-    buildingCrossed,
+    cells,
     player.id,
     otherPlayers,
     currentRoundPicks,
   );
-  if (bombRowsCompleted.length > 0 && (!pick.bomb_cells || pick.bomb_cells.length === 0)) {
-    return fail("must include bomb_cells when completing a bomb row");
-  }
-  if (bombRowsCompleted.length === 0 && pick.bomb_cells && pick.bomb_cells.length > 0) {
-    return fail("bomb_cells are only allowed when earning a bomb row item");
-  }
-  if (pick.bomb_cells && pick.bomb_cells.length > 0) {
-    const bombResult = validateBombCells(config, pick.bomb_cells);
-    if (!bombResult.valid) return fail(`bomb_cells: ${bombResult.error}`);
-  }
+  if (!bombCascadeResult.valid) return bombCascadeResult;
 
   return ok();
 }
@@ -369,26 +495,16 @@ export function validateSpecialPick(
     }
   }
 
-  // Bomb cells from row completion — required when a bomb-item row is newly completed
-  const allCrossedAfterSpecial = [...player.crossed_cells, ...cells];
-  const bombRowsCompletedBySpecial = newlyCompletedBombRows(
+  const bombCascadeResult = validateBombCascade(
     config,
+    pick,
     player.crossed_cells,
-    allCrossedAfterSpecial,
+    cells,
     player.id,
     otherPlayers,
     currentRoundPicks,
   );
-  if (bombRowsCompletedBySpecial.length > 0 && (!pick.bomb_cells || pick.bomb_cells.length === 0)) {
-    return fail("must include bomb_cells when completing a bomb row");
-  }
-  if (bombRowsCompletedBySpecial.length === 0 && pick.bomb_cells && pick.bomb_cells.length > 0) {
-    return fail("bomb_cells are only allowed when earning a bomb row item");
-  }
-  if (pick.bomb_cells && pick.bomb_cells.length > 0) {
-    const bombResult = validateBombCells(config, pick.bomb_cells);
-    if (!bombResult.valid) return fail(`bomb_cells: ${bombResult.error}`);
-  }
+  if (!bombCascadeResult.valid) return bombCascadeResult;
 
   return ok();
 }

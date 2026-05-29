@@ -123,11 +123,11 @@ Every uncrossed cell of the target color that passes `isValidPlacement` is tried
 
 ### Step 3 — Handle bomb rows
 
-If the winning group would complete a row whose `rowItems` value is `"bomb"`, the bot must also choose a 2×2 bomb block. `findBestBombBlock` scans all complete 2×2 blocks where all four cells exist on the board, allowing cells that are already crossed off. It scores only cells that would be newly crossed, preferring blocks with newly-crossed star cells (stars are worth +2 each to eliminate the end-game penalty), and returns the best block. If no valid block exists, that pick is skipped entirely and the bot falls back to the next-best pair.
+If the winning group would complete a row whose `rowItems` value is `"bomb"`, the bot must also choose a 2×2 bomb block. If that block completes another bomb row, the bot keeps choosing follow-up blocks until the chain is resolved. `findBestBombBlock` scans all complete 2×2 blocks where all four cells exist on the board, allowing cells that are already crossed off. It scores only cells that would be newly crossed, preferring blocks with newly-crossed star cells (stars are worth +2 each to eliminate the end-game penalty), and returns the best block. If any required block cannot be found, that pick is skipped entirely and the bot falls back to the next-best pair.
 
 ### Step 4 — Return the best pick or pass
 
-After evaluating all nine pairs, the bot returns the `color_number` pick with the highest group score, including any `bomb_cells` if a bomb row was completed. If no valid pick was found across all nine pairs, it returns `{ type: "pass" }`.
+After evaluating all nine pairs, the bot returns the `color_number` pick with the highest group score, including any ordered `bombs` blocks if bomb rows were completed. If no valid pick was found across all nine pairs, it returns `{ type: "pass" }`.
 
 ## Validation Safety Net
 

@@ -103,13 +103,13 @@ export interface ColorNumberPick {
   declared_color: Color;
   declared_number: number; // 1–5
   cells: string[];
-  bomb_cells?: string[]; // only present if a bomb row was completed this turn
+  bombs?: string[][]; // ordered 2x2 blocks earned from completed bomb rows
 }
 
 export interface SpecialPick {
   type: "special";
   cells: string[];
-  bomb_cells?: string[];
+  bombs?: string[][];
 }
 
 export interface PassPick {

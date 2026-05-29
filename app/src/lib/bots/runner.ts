@@ -34,6 +34,8 @@ async function runBotPick(
     roll,
     isActivePlayer,
     activePick,
+    activePlayerId,
+    playerPicks,
     round,
     allPlayers,
   });

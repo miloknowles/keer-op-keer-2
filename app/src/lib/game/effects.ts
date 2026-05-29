@@ -4,6 +4,7 @@ import { isColorWildcard, isNumberWildcard } from "./dice";
 import { isRowComplete, isColumnComplete, getCell } from "./sheet";
 import {
   type CurrentRoundPicks,
+  cellsCrossedByPick,
   wasRowCompletedByOthersBeforeRound,
 } from "./rules";
 
@@ -19,12 +20,9 @@ export function computePickResult(
   otherPlayers: Pick<RoomPlayerRow, "id" | "crossed_cells">[],
   currentRoundPicks: CurrentRoundPicks = {},
 ): PickResult {
-  const pickedCells = pick.type === "pass" ? [] : (pick.cells ?? []);
-  const bombCells =
-    pick.type !== "pass" && pick.bomb_cells ? pick.bomb_cells : [];
   const newCrossedCells = [...player.crossed_cells];
   const newCrossedSet = new Set(newCrossedCells);
-  for (const key of [...pickedCells, ...bombCells]) {
+  for (const key of cellsCrossedByPick(pick)) {
     if (newCrossedSet.has(key)) continue;
     newCrossedCells.push(key);
     newCrossedSet.add(key);
