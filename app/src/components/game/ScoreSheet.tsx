@@ -228,7 +228,11 @@ export function ScoreSheet({
                   (viewerClaimedFirst || !someoneElseFirst) && "text-gray-400",
                 )}
               >
-                {col === "H" ? "📦" : bonus?.subsequent}
+                {col === "H" ? (
+                  <span className="text-base leading-none">📦</span>
+                ) : (
+                  bonus?.subsequent
+                )}
               </div>
               {/* Heart bonus square — light heart placeholder; filled with recorded bonus on column completion */}
               <div

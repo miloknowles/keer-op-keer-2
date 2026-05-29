@@ -321,7 +321,6 @@ export default function GamePage() {
     return result;
   }, [room.status, players]);
 
-  const scoring = boardConfig.scoring;
   const { grid } = boardConfig;
   const scoringContext = useMemo(
     () => buildScoringContext(boardConfig, players, histories),
@@ -863,11 +862,9 @@ export default function GamePage() {
               />
               <ResourceTracks
                 hearts={viewing.hearts}
-                heartSize={scoring.heartTrack.size}
                 boxesUnlocked={viewing.boxes_unlocked}
                 boxesSpent={viewing.boxes_spent}
                 wildcards={viewing.wildcards}
-                wildcardStart={scoring.wildcardTrack.starting}
               />
             </div>
           </div>

@@ -18,7 +18,7 @@ export const SPECIAL_DISPLAY: Record<DiceSpecialFace, string> = {
 };
 
 export const SPECIAL_DESCRIPTION: Record<DiceSpecialFace, string> = {
-  heart: "Heart (+1 heart track)",
+  heart: "Heart (+1 on columns)",
   fill: "Fill (connected section)",
   three_in_a_row: "3-in-a-row",
   bomb: "Bomb (any 2×2)",
